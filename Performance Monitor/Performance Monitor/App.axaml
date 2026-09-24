@@ -1,0 +1,16 @@
+﻿<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="TaskManager.App"
+             xmlns:local="using:TaskManager"
+             RequestedThemeVariant="Dark">
+             <!-- Set to "Dark" for Task Manager theme -->
+
+    <Application.DataTemplates>
+        <local:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+
+</Application>

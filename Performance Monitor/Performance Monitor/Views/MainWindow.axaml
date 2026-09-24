@@ -1,0 +1,492 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TaskManager.ViewModels"
+        x:Class="TaskManager.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Performance Monitor"
+        Icon="/Assets/Duck.png"
+        Width="900" Height="600"
+        Background="#1E1E1E">
+
+    <Design.DataContext>
+        <vm:MainViewModel/>
+    </Design.DataContext>
+
+    <!-- Dynamic Styles for Active Navigation Buttons -->
+    <Window.Styles>
+        <Style Selector="Button.nav">
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#AAAAAA"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+
+        <!-- Active state highlight styles -->
+        <Style Selector="Button.nav[Tag=true]">
+            <Setter Property="Background" Value="#333337"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <!-- Home dashboard card styles -->
+        <Style Selector="Button.homeCard">
+            <Setter Property="Background" Value="#252526"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="BorderBrush" Value="#333333"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="Button.homeCard:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#2D2D30"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid ColumnDefinitions="220, *">
+
+        <!-- Left Sidebar Navigation -->
+        <Border Grid.Column="0" Background="#252526" BorderBrush="#333333" BorderThickness="0,0,1,0">
+            <StackPanel Margin="10" Spacing="6">
+                <Button Classes="nav" Command="{Binding SelectHomeCommand}" Content="Home" Tag="{Binding IsHomeActive}"/>
+                <Button Classes="nav" Command="{Binding SelectCpuCommand}" Content="CPU" Tag="{Binding IsCpuActive}"/>
+                <Button Classes="nav" Command="{Binding SelectMemoryCommand}" Content="Memory" Tag="{Binding IsMemoryActive}"/>
+                <Button Classes="nav" Command="{Binding SelectDiskCommand}" Content="Disk" Tag="{Binding IsDiskActive}"/>
+                <Button Classes="nav" Command="{Binding SelectWifiCommand}" Content="Wi-Fi" Tag="{Binding IsWifiActive}"/>
+                <Button Classes="nav" Command="{Binding SelectGpuCommand}" Content="GPU" Tag="{Binding IsGpuActive}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Main Content Area -->
+        <ContentControl Grid.Column="1" Content="{Binding CurrentView}">
+            <ContentControl.DataTemplates>
+
+                <!-- Home View Template -->
+                <DataTemplate DataType="{x:Type vm:HomeViewModel}">
+                    <Grid RowDefinitions="Auto, *" Margin="24">
+                        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                            <TextBlock Text="Performance Monitor" FontSize="28" FontWeight="SemiBold" Foreground="White"/>
+                            <TextBlock Text="Choose a category to view live stats" FontSize="13" Foreground="#888888" Margin="0,2,0,0"/>
+                        </StackPanel>
+
+                        <UniformGrid Grid.Row="1" Columns="2" Rows="3" VerticalAlignment="Top">
+                            <Button Classes="homeCard" Margin="0,0,10,10"
+                                    Command="{Binding $parent[Window].DataContext.SelectCpuCommand}">
+                                <StackPanel>
+                                    <TextBlock Text="CPU" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Text="Utilization, speed, processes and core details" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Classes="homeCard" Margin="10,0,0,10"
+                                    Command="{Binding $parent[Window].DataContext.SelectMemoryCommand}">
+                                <StackPanel>
+                                    <TextBlock Text="Memory" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Text="RAM usage, capacity and live utilization" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Classes="homeCard" Margin="0,0,10,10"
+                                    Command="{Binding $parent[Window].DataContext.SelectDiskCommand}">
+                                <StackPanel>
+                                    <TextBlock Text="Disk" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Text="Active time, read/write speed and capacity" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Classes="homeCard" Margin="10,0,0,10"
+                                    Command="{Binding $parent[Window].DataContext.SelectWifiCommand}">
+                                <StackPanel>
+                                    <TextBlock Text="Wi-Fi" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Text="Send/receive throughput and adapter details" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Classes="homeCard" Margin="0,10,10,0"
+                                    Command="{Binding $parent[Window].DataContext.SelectGpuCommand}">
+                                <StackPanel>
+                                    <TextBlock Text="GPU" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Text="3D utilization, temperature and VRAM usage" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Button>
+                        </UniformGrid>
+                    </Grid>
+                </DataTemplate>
+
+                <!-- Memory View Template -->
+                <DataTemplate DataType="{x:Type vm:MemoryViewModel}">
+                    <Grid RowDefinitions="Auto, Auto, *" Margin="24">
+                        <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,20">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Memory" FontSize="28" FontWeight="SemiBold" Foreground="White"/>
+                                <TextBlock Text="Memory usage" FontSize="13" Foreground="#888888" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding TotalMemoryText}" FontSize="18" Foreground="#CCCCCC" VerticalAlignment="Top"/>
+                        </Grid>
+
+                        <StackPanel Grid.Row="1" Margin="0,0,0,30">
+                            <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,8">
+                                <TextBlock Text="Live Memory Utilization" Foreground="#CCCCCC" FontSize="14"/>
+                                <TextBlock Grid.Column="1" Text="{Binding MemoryUsagePercent}" Foreground="#0078D4" FontWeight="Bold" FontSize="14"/>
+                            </Grid>
+                            <ProgressBar Value="{Binding MemoryUsagePercentValue}" Minimum="0" Maximum="100" Height="12" Foreground="#0078D4" Background="#333333" CornerRadius="4"/>
+                        </StackPanel>
+
+                        <UniformGrid Grid.Row="2" Columns="2" Rows="2" VerticalAlignment="Top">
+                            <Border Background="#252526" CornerRadius="6" Padding="16" Margin="0,0,10,10">
+                                <StackPanel>
+                                    <TextBlock Text="In use" FontSize="12" Foreground="#888888"/>
+                                    <TextBlock Text="{Binding UsedMemoryText}" FontSize="24" FontWeight="SemiBold" Foreground="White" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#252526" CornerRadius="6" Padding="16" Margin="10,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="Usage %" FontSize="12" Foreground="#888888"/>
+                                    <TextBlock Text="{Binding MemoryUsagePercent}" FontSize="24" FontWeight="SemiBold" Foreground="White" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#252526" CornerRadius="6" Padding="16" Margin="0,10,10,0">
+                                <StackPanel>
+                                    <TextBlock Text="Total Hardware RAM" FontSize="12" Foreground="#888888"/>
+                                    <TextBlock Text="{Binding TotalMemoryText}" FontSize="24" FontWeight="SemiBold" Foreground="White" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#252526" CornerRadius="6" Padding="16" Margin="10,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Status" FontSize="12" Foreground="#888888"/>
+                                    <TextBlock Text="Active Monitoring" FontSize="20" FontWeight="SemiBold" Foreground="#4CAF50" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                    </Grid>
+                </DataTemplate>
+
+                <!-- CPU View Template -->
+                <DataTemplate DataType="{x:Type vm:CpuViewModel}">
+                    <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="20">
+                        
+                        <!-- Top Header & Model Name -->
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,10">
+                            <TextBlock Grid.Column="0" Text="CPU" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding CpuName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+
+                        <!-- % Utilization Header -->
+                        <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,0,0,5">
+                            <TextBlock Text="% Utilization" FontSize="12" Foreground="#888888"/>
+                            <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
+                        </Grid>
+
+                        <!-- Live Graph Box Replacement (ProgressBar Grid) -->
+                        <Border Grid.Row="2" Height="160" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Margin="0,0,0,15" Padding="10">
+                            <Grid RowDefinitions="*, Auto">
+                                <ProgressBar Value="{Binding UtilizationValue}" Minimum="0" Maximum="100" Height="20" Foreground="#1289A7" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
+                                <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,10,0,0">
+                                    <TextBlock Text="60 seconds" FontSize="11" Foreground="#666666"/>
+                                    <TextBlock Grid.Column="1" Text="0" FontSize="11" Foreground="#666666"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- Dynamic Metrics Grid -->
+                        <Grid Grid.Row="3" ColumnDefinitions="3*, 2*">
+                            
+                            <!-- Left Side Live Stats -->
+                            <StackPanel Grid.Column="0" Spacing="15" Margin="0,0,20,0">
+                                <Grid ColumnDefinitions="*, *">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Utilization" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding Utilization}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Speed" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding Speed}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*, *, *">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Processes" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding Processes}" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Threads" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding Threads}" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Handles" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding Handles}" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <StackPanel>
+                                    <TextBlock Text="Up time" FontSize="12" Foreground="#888888"/>
+                                    <TextBlock Text="{Binding Uptime}" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Right Side System Technical Specs -->
+                            <Grid Grid.Column="1" ColumnDefinitions="*, Auto">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <TextBlock Text="Base speed:" Foreground="#888888"/>
+                                    <TextBlock Text="Sockets:" Foreground="#888888"/>
+                                    <TextBlock Text="Cores:" Foreground="#888888"/>
+                                    <TextBlock Text="Logical processors:" Foreground="#888888"/>
+                                    <TextBlock Text="Virtualization:" Foreground="#888888"/>
+                                    <TextBlock Text="L1 cache:" Foreground="#888888"/>
+                                    <TextBlock Text="L2 cache:" Foreground="#888888"/>
+                                    <TextBlock Text="L3 cache:" Foreground="#888888"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding BaseSpeed}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding Sockets}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding Cores}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding LogicalProcessors}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding Virtualization}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding L1Cache}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding L2Cache}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding L3Cache}" Foreground="White" TextAlignment="Right"/>
+                                </StackPanel>
+                            </Grid>
+
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+
+                <!-- Disk View Template -->
+                <DataTemplate DataType="{x:Type vm:DiskViewModel}">
+                    <Grid RowDefinitions="Auto, Auto, Auto, Auto, *" Margin="20">
+
+                        <!-- Top Header & Model Name -->
+                        <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,10">
+                            <TextBlock Text="{Binding DiskName}" FontSize="32" FontWeight="Bold" Foreground="White"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ModelName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <!-- Active Time Meter Header -->
+                        <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,0,0,5">
+                            <TextBlock Text="Active time" FontSize="12" Foreground="#888888"/>
+                            <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
+                        </Grid>
+
+                        <!-- Active Time Progress Grid -->
+                        <Border Grid.Row="2" Height="100" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Margin="0,0,0,15" Padding="10">
+                            <Grid RowDefinitions="*, Auto">
+                                <ProgressBar Value="{Binding ActiveTimeValue}" Minimum="0" Maximum="100" Height="16" Foreground="#82C91E" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
+                                <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,5,0,0">
+                                    <TextBlock Text="60 seconds" FontSize="11" Foreground="#666666"/>
+                                    <TextBlock Grid.Column="1" Text="0" FontSize="11" Foreground="#666666"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- Dynamic Metrics Grid -->
+                        <Grid Grid.Row="3" ColumnDefinitions="2*, 3*" Margin="0,0,0,10">
+                            
+                            <!-- Left Side Live Read / Write Stats -->
+                            <StackPanel Grid.Column="0" Spacing="15">
+                                <Grid ColumnDefinitions="*, *">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Active time" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding ActiveTime}" FontSize="26" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Average response time" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding AverageResponseTime}" FontSize="26" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*, *">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Read speed" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding ReadSpeed}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Write speed" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding WriteSpeed}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Right Side Disk Specs -->
+                            <Grid Grid.Column="1" ColumnDefinitions="Auto, *" Margin="30,0,0,0">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <TextBlock Text="Capacity:" Foreground="#888888"/>
+                                    <TextBlock Text="Formatted:" Foreground="#888888"/>
+                                    <TextBlock Text="System disk:" Foreground="#888888"/>
+                                    <TextBlock Text="Page file:" Foreground="#888888"/>
+                                    <TextBlock Text="Type:" Foreground="#888888"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Margin="20,0,0,0" Spacing="4" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding Capacity}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding Formatted}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding SystemDisk}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding PageFile}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding Type}" Foreground="White" TextAlignment="Right"/>
+                                </StackPanel>
+                            </Grid>
+
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+
+                <!-- Wi-Fi View Template -->
+                <DataTemplate DataType="{x:Type vm:WifiViewModel}">
+                    <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="20">
+
+                        <!-- Header & Adapter Model -->
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,10">
+                            <TextBlock Text="Wi-Fi" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,20,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding AdapterName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+
+                        <!-- Throughput Section Header -->
+                        <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,0,0,5">
+                            <TextBlock Text="Throughput" FontSize="12" Foreground="#888888"/>
+                            <TextBlock Grid.Column="1" Text="100 Kbps" FontSize="12" Foreground="#888888"/>
+                        </Grid>
+
+                        <!-- Network Graph Area -->
+                        <Border Grid.Row="2" Height="180" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Margin="0,0,0,15" Padding="10">
+                            <Grid RowDefinitions="*, Auto">
+                                <StackPanel VerticalAlignment="Center" Spacing="8">
+                                    <!-- Send Bar -->
+                                    <ProgressBar Value="{Binding SendValue}" Minimum="0" Maximum="100" Height="10" Foreground="#D63031" Background="#1E272C" CornerRadius="2"/>
+                                    <!-- Receive Bar -->
+                                    <ProgressBar Value="{Binding ReceiveValue}" Minimum="0" Maximum="100" Height="10" Foreground="#1289A7" Background="#1E272C" CornerRadius="2"/>
+                                </StackPanel>
+                                <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,10,0,0">
+                                    <TextBlock Text="60 seconds" FontSize="11" Foreground="#666666"/>
+                                    <TextBlock Grid.Column="1" Text="0" FontSize="11" Foreground="#666666"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- Live Network Stats & Specs Grid -->
+                        <Grid Grid.Row="3" ColumnDefinitions="2*, 3*">
+
+                            <!-- Left Side: Send / Receive Throughput -->
+                            <StackPanel Grid.Column="0" Spacing="15">
+                                <StackPanel>
+                                    <TextBlock Text="Send" FontSize="12" Foreground="#888888"/>
+                                    <TextBlock Text="{Binding SendSpeed}" FontSize="26" FontWeight="SemiBold" Foreground="White"/>
+                                </StackPanel>
+
+                                <StackPanel>
+                                    <TextBlock Text="Receive" FontSize="12" Foreground="#888888"/>
+                                    <TextBlock Text="{Binding ReceiveSpeed}" FontSize="26" FontWeight="SemiBold" Foreground="White"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Right Side: Network Properties -->
+                            <Grid Grid.Column="1" ColumnDefinitions="Auto, *" Margin="20,0,0,0">
+                                <StackPanel Grid.Column="0" Spacing="6">
+                                    <TextBlock Text="Adapter name:" Foreground="#888888"/>
+                                    <TextBlock Text="SSID:" Foreground="#888888"/>
+                                    <TextBlock Text="Connection type:" Foreground="#888888"/>
+                                    <TextBlock Text="IPv4 address:" Foreground="#888888"/>
+                                    <TextBlock Text="IPv6 address:" Foreground="#888888"/>
+                                    <TextBlock Text="Signal strength:" Foreground="#888888"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Margin="20,0,0,0" Spacing="6" HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding AdapterNameLabel}" Foreground="White"/>
+                                    <TextBlock Text="{Binding Ssid}" Foreground="White"/>
+                                    <TextBlock Text="{Binding ConnectionType}" Foreground="White"/>
+                                    <TextBlock Text="{Binding Ipv4Address}" Foreground="White"/>
+                                    <TextBlock Text="{Binding Ipv6Address}" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding SignalStrength}" Foreground="White"/>
+                                </StackPanel>
+                            </Grid>
+
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+
+                <!-- GPU View Template -->
+                <DataTemplate DataType="{x:Type vm:GpuViewModel}">
+                    <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="20">
+
+                        <!-- Top Header & Model Name -->
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,10">
+                            <TextBlock Text="GPU" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding GpuName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+
+                        <!-- Utilization Meter Header -->
+                        <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,0,0,5">
+                            <TextBlock Text="3D Utilization" FontSize="12" Foreground="#888888"/>
+                            <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
+                        </Grid>
+
+                        <!-- GPU Graph Area -->
+                        <Border Grid.Row="2" Height="150" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Margin="0,0,0,15" Padding="10">
+                            <Grid RowDefinitions="*, Auto">
+                                <ProgressBar Value="{Binding UtilizationValue}" Minimum="0" Maximum="100" Height="20" Foreground="#00A8FF" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
+                                <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,10,0,0">
+                                    <TextBlock Text="60 seconds" FontSize="11" Foreground="#666666"/>
+                                    <TextBlock Grid.Column="1" Text="0" FontSize="11" Foreground="#666666"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- Live Metrics Grid -->
+                        <Grid Grid.Row="3" ColumnDefinitions="3*, 2*">
+
+                            <!-- Left Side: Live Usage & VRAM -->
+                            <StackPanel Grid.Column="0" Spacing="15" Margin="0,0,20,0">
+                                <Grid ColumnDefinitions="*, *">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="Utilization" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding Utilization}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="GPU Temperature" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding Temperature}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*, *">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="GPU Memory" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding MemoryUsage}" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Shared Memory" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Text="{Binding SharedMemoryUsage}" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Right Side: Specs -->
+                            <Grid Grid.Column="1" ColumnDefinitions="*, Auto">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <TextBlock Text="Driver version:" Foreground="#888888"/>
+                                    <TextBlock Text="Driver date:" Foreground="#888888"/>
+                                    <TextBlock Text="DirectX version:" Foreground="#888888"/>
+                                    <TextBlock Text="Hardware location:" Foreground="#888888"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
+                                    <TextBlock Text="{Binding DriverVersion}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding DriverDate}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding DirectXVersion}" Foreground="White" TextAlignment="Right"/>
+                                    <TextBlock Text="{Binding PhysicalLocation}" Foreground="White" TextAlignment="Right"/>
+                                </StackPanel>
+                            </Grid>
+
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+
+            </ContentControl.DataTemplates>
+        </ContentControl>
+
+    </Grid>
+</Window>

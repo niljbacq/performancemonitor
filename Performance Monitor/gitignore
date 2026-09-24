@@ -1,0 +1,21 @@
+## .NET build results
+bin/
+obj/
+publish/
+out/
+
+## Visual Studio / Rider files
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build logs
+*.binlog
+*.log
+
+## OS junk files
+.DS_Store
+Thumbs.db
