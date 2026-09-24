@@ -16,7 +16,7 @@ jobs:
           - os: ubuntu-latest
             rid: linux-x64
             artifact: performance-monitor-linux-x64
-          - os: macos-13
+          - os: macos-14
             rid: osx-x64
             artifact: performance-monitor-macos-x64
           - os: macos-latest
