@@ -1,24 +1,46 @@
 <Project Sdk="Microsoft.NET.Sdk">
-	<PropertyGroup>
-		<OutputType>WinExe</OutputType>
-		<TargetFramework>net8.0</TargetFramework>
-		<Nullable>enable</Nullable>
-		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-		<AssemblyName>Performance Monitor</AssemblyName>
-		<RootNamespace>TaskManager</RootNamespace>
-	</PropertyGroup>
 
-	<ItemGroup>
-		<AvaloniaResource Include="Assets\**" />
-	</ItemGroup>
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net8.0-android</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Performance Monitor</AssemblyName>
+    <RootNamespace>TaskManager</RootNamespace>
+  </PropertyGroup>
 
-	<ItemGroup>
-		<PackageReference Include="Avalonia" Version="11.0.10" />
-		<PackageReference Include="Avalonia.Desktop" Version="11.0.10" />
-		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.10" />
-		<PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.10" />
-		<PackageReference Include="Avalonia.Diagnostics" Version="11.0.10" />
-		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
-		<PackageReference Include="Hardware.Info" Version="100.0.1.1" />
-	</ItemGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net8.0-android'">
+    <OutputType>WinExe</OutputType>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <SupportedOSPlatformVersion>21</SupportedOSPlatformVersion>
+    <ApplicationId>com.performancemonitor.app</ApplicationId>
+    <DefineConstants>$(DefineConstants);ANDROID</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.10" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net8.0-android'">
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.0.10" Condition="'$(Configuration)'=='Debug'" />
+    <PackageReference Include="Hardware.Info" Version="100.0.1.1" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <PackageReference Include="Avalonia.Android" Version="11.0.10" />
+    <AndroidManifest Include="Platforms\Android\AndroidManifest.xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Platforms\Android\**\*.cs" Condition="'$(TargetFramework)' != 'net8.0-android'" />
+    <None Include="Platforms\Android\**\*.cs" Condition="'$(TargetFramework)' != 'net8.0-android'" />
+  </ItemGroup>
+
 </Project>

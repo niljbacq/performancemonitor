@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-desktop:
     strategy:
       matrix:
         include:
@@ -16,12 +16,6 @@ jobs:
           - os: ubuntu-latest
             rid: linux-x64
             artifact: performance-monitor-linux-x64
-          - os: macos-14
-            rid: osx-x64
-            artifact: performance-monitor-macos-x64
-          - os: macos-latest
-            rid: osx-arm64
-            artifact: performance-monitor-macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -31,9 +25,39 @@ jobs:
       - name: Publish
         run: >
           dotnet publish "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
-          -c Release -r ${{ matrix.rid }} --self-contained true
+          -f net8.0 -c Release -r ${{ matrix.rid }} --self-contained true
           -p:PublishSingleFile=true -o publish
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
+          path: publish/
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: dotnet workload install android
+
+      - name: Build Debug APK
+        run: >
+          dotnet publish "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
+          -f net8.0-android -c Debug -o publish/android-debug
+
+      - name: Build Release AAB
+        run: >
+          dotnet publish "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
+          -f net8.0-android -c Release
+          -p:AndroidPackageFormat=aab
+          -o publish/android-release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: performance-monitor-android
           path: publish/

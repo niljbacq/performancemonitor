@@ -19,3 +19,8 @@ out/
 ## OS junk files
 .DS_Store
 Thumbs.db
+
+## Android build artifacts
+release.keystore
+*.aab
+*.apk
