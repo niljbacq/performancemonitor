@@ -19,14 +19,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Restore workloads
+        run: dotnet workload restore "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
+
       - name: Publish
         run: >
           dotnet publish "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
           -f net8.0 -c Release -r ${{ matrix.rid }} --self-contained true
           -p:PublishSingleFile=true -o publish
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -36,14 +42,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - run: dotnet workload install android
+
+      - name: Restore workloads
+        run: dotnet workload restore "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
 
       - name: Build Debug APK
         run: >
@@ -56,8 +66,3 @@ jobs:
           -f net8.0-android -c Release
           -p:AndroidPackageFormat=aab
           -o publish/android-release
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: performance-monitor-android
-          path: publish/
