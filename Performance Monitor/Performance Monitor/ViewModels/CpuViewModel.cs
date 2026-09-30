@@ -14,6 +14,8 @@ namespace TaskManager.ViewModels;
 public partial class CpuViewModel : ViewModelBase
 {
     private PerformanceCounter? _cpuCounter;
+    private ulong _prevIdle = 0;
+    private ulong _prevTotal = 0;
 
     private string _cpuName = "Detecting CPU...";
     public string CpuName
@@ -163,6 +165,10 @@ public partial class CpuViewModel : ViewModelBase
             {
                 LoadLinuxSpecs();
             }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                LoadMacSpecs();
+            }
         });
     }
 
@@ -293,6 +299,52 @@ public partial class CpuViewModel : ViewModelBase
         }
     }
 
+    private void LoadMacSpecs()
+    {
+        try
+        {
+            string brand = ExecuteCommand("sysctl", "-n machdep.cpu.brand_string").Trim();
+            CpuName = !string.IsNullOrWhiteSpace(brand)
+                ? brand
+                : ExecuteCommand("sysctl", "-n hw.model").Trim();
+
+            string ncpu = ExecuteCommand("sysctl", "-n hw.ncpu").Trim();
+            if (int.TryParse(ncpu, out int n) && n > 0)
+            {
+                LogicalProcessors = n.ToString();
+
+                string phys = ExecuteCommand("sysctl", "-n hw.physicalcpu").Trim();
+                Cores = int.TryParse(phys, out int p) && p > 0 ? p.ToString() : n.ToString();
+            }
+
+            string freq = ExecuteCommand("sysctl", "-n hw.cpufrequency").Trim();
+            if (long.TryParse(freq, out long hz) && hz > 0)
+            {
+                BaseSpeed = $"{hz / 1_000_000_000.0:F2} GHz";
+                Speed = BaseSpeed;
+            }
+
+            if (long.TryParse(ExecuteCommand("sysctl", "-n hw.l1icachesize").Trim(), out long l1) && l1 > 0)
+                L1Cache = FormatBytes(l1);
+            if (long.TryParse(ExecuteCommand("sysctl", "-n hw.l2cachesize").Trim(), out long l2) && l2 > 0)
+                L2Cache = FormatBytes(l2);
+            if (long.TryParse(ExecuteCommand("sysctl", "-n hw.l3cachesize").Trim(), out long l3) && l3 > 0)
+                L3Cache = FormatBytes(l3);
+        }
+        catch
+        {
+            CpuName = "Apple / Intel Processor";
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024 * 1024):F1} GB";
+        if (bytes >= 1024L * 1024)        return $"{bytes / (1024.0 * 1024):F1} MB";
+        if (bytes >= 1024L)               return $"{bytes / 1024.0:F0} KB";
+        return $"{bytes} B";
+    }
+
     private async Task StartMonitoringAsync()
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
@@ -316,6 +368,10 @@ public partial class CpuViewModel : ViewModelBase
                 else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 {
                     cpuUsage = GetLinuxCpuUsage();
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                {
+                    cpuUsage = GetMacCpuUsage();
                 }
 
                 int cpuPercent = (int)Math.Round(cpuUsage);
@@ -385,21 +441,46 @@ public partial class CpuViewModel : ViewModelBase
     {
         try
         {
-            if (File.Exists("/proc/stat"))
-            {
-                string firstLine = File.ReadLines("/proc/stat").First();
-                var parts = firstLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 5)
-                {
-                    ulong idle = ulong.Parse(parts[4]);
-                    ulong total = 0;
-                    for (int i = 1; i < parts.Length; i++)
-                    {
-                        if (ulong.TryParse(parts[i], out ulong val)) total += val;
-                    }
+            if (!File.Exists("/proc/stat")) return 0;
 
-                    return (float)Math.Clamp((1.0 - ((double)idle / Math.Max(total, 1))) * 100, 0, 100);
-                }
+            var parts = File.ReadLines("/proc/stat").First()
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 5) return 0;
+
+            ulong idle = ulong.Parse(parts[4]);
+            ulong iowait = parts.Length > 5 ? ulong.Parse(parts[5]) : 0;
+            ulong total = 0;
+            for (int i = 1; i < parts.Length; i++)
+                if (ulong.TryParse(parts[i], out ulong v)) total += v;
+
+            ulong idleTotal = idle + iowait;
+            ulong idleDelta = idleTotal - _prevIdle;
+            ulong totalDelta = total - _prevTotal;
+
+            _prevIdle = idleTotal;
+            _prevTotal = total;
+
+            if (totalDelta == 0) return 0;
+            return (float)Math.Clamp((1.0 - (double)idleDelta / totalDelta) * 100, 0, 100);
+        }
+        catch { return 0; }
+    }
+
+    private float GetMacCpuUsage()
+    {
+        try
+        {
+            // `top -l 1 -n 0` skips process listing, so it's fast enough (~150-250ms).
+            // It still spawns a subprocess each tick — acceptable for now, but if you
+            // want to eliminate the subprocess later, use host_statistics64 P/Invoke.
+            string output = ExecuteCommand("top", "-l 1 -n 0");
+            var match = System.Text.RegularExpressions.Regex.Match(
+                output, @"CPU usage:\s*([\d.]+)%\s*user,\s*([\d.]+)%\s*sys");
+            if (match.Success &&
+                double.TryParse(match.Groups[1].Value, out double user) &&
+                double.TryParse(match.Groups[2].Value, out double sys))
+            {
+                return (float)Math.Clamp(user + sys, 0, 100);
             }
         }
         catch { }

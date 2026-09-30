@@ -227,13 +227,15 @@ public partial class DiskViewModel : ViewModelBase
         {
             DiskName = "Disk 0";
 
-            // SSD vs HDD Check via rota
-            if (File.Exists("/sys/block/sda/queue/rotational"))
+            string? dev = GetPrimaryLinuxBlockDevice() ?? "sda";
+
+            string rotaPath = $"/sys/block/{dev}/queue/rotational";
+            if (File.Exists(rotaPath))
             {
-                string rota = File.ReadAllText("/sys/block/sda/queue/rotational").Trim();
+                string rota = File.ReadAllText(rotaPath).Trim();
                 Type = rota == "0" ? "SSD" : "HDD";
             }
-            else if (Directory.Exists("/sys/block/nvme0n1"))
+            else if (dev.StartsWith("nvme"))
             {
                 Type = "NVMe SSD";
             }
@@ -288,10 +290,15 @@ public partial class DiskViewModel : ViewModelBase
                 }
                 else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 {
-                    if (File.Exists("/proc/diskstats"))
+                    string? primaryDev = GetPrimaryLinuxBlockDevice();
+                    if (primaryDev != null && File.Exists("/proc/diskstats"))
                     {
                         string[] lines = File.ReadAllLines("/proc/diskstats");
-                        var targetLine = lines.FirstOrDefault(l => l.Contains("sda") || l.Contains("nvme0n1"));
+                        var targetLine = lines.FirstOrDefault(l =>
+                        {
+                            var cols = l.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                            return cols.Length >= 3 && cols[2] == primaryDev;
+                        });
 
                         if (targetLine != null)
                         {
@@ -327,23 +334,58 @@ public partial class DiskViewModel : ViewModelBase
                         }
                     }
                 }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                {
+                    // Real macOS read/write bytes require IOKit P/Invoke
+                    // (kIOBlockStorageDriverStatisticsKey). Until that's implemented,
+                    // report N/A rather than stale zeros.
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        ReadSpeed = "N/A";
+                        WriteSpeed = "N/A";
+                    });
+                }
             }
             catch { }
         }
+    }
+
+    private string? GetPrimaryLinuxBlockDevice()
+    {
+        try
+        {
+            foreach (var line in File.ReadAllLines("/proc/mounts"))
+            {
+                var cols = line.Split(' ');
+                if (cols.Length < 2 || cols[1] != "/") continue;
+
+                string dev = cols[0];
+                if (!dev.StartsWith("/dev/")) continue;
+
+                string name = Path.GetFileName(dev);
+
+                foreach (var block in Directory.GetDirectories("/sys/block")
+                                               .Select(Path.GetFileName))
+                {
+                    if (name == block || name.StartsWith(block))
+                        return block;
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 
     private int GetLinuxSectorSize()
     {
         try
         {
-            if (File.Exists("/sys/block/sda/queue/hw_sector_size"))
+            string? dev = GetPrimaryLinuxBlockDevice();
+            if (dev != null)
             {
-                if (int.TryParse(File.ReadAllText("/sys/block/sda/queue/hw_sector_size").Trim(), out int size))
-                    return size;
-            }
-            else if (File.Exists("/sys/block/nvme0n1/queue/hw_sector_size"))
-            {
-                if (int.TryParse(File.ReadAllText("/sys/block/nvme0n1/queue/hw_sector_size").Trim(), out int size))
+                string path = $"/sys/block/{dev}/queue/hw_sector_size";
+                if (File.Exists(path) &&
+                    int.TryParse(File.ReadAllText(path).Trim(), out int size))
                     return size;
             }
         }
@@ -355,13 +397,12 @@ public partial class DiskViewModel : ViewModelBase
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            if (File.Exists("/sys/block/sda/device/model"))
+            string? dev = GetPrimaryLinuxBlockDevice();
+            if (dev != null)
             {
-                return File.ReadAllText("/sys/block/sda/device/model").Trim();
-            }
-            if (File.Exists("/sys/block/nvme0n1/device/model"))
-            {
-                return File.ReadAllText("/sys/block/nvme0n1/device/model").Trim();
+                string path = $"/sys/block/{dev}/device/model";
+                if (File.Exists(path))
+                    return File.ReadAllText(path).Trim();
             }
         }
         return "System Storage Device";

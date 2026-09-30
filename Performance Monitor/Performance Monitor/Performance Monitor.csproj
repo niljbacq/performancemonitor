@@ -4,7 +4,7 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-		<AssemblyName>Performance Monitor</AssemblyName>
+		<AssemblyName>PerformanceMonitor</AssemblyName>
 		<RootNamespace>TaskManager</RootNamespace>
 	</PropertyGroup>
 
@@ -20,5 +20,10 @@
 		<PackageReference Include="Avalonia.Diagnostics" Version="11.0.10" />
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
 		<PackageReference Include="Hardware.Info" Version="100.0.1.1" />
-	</ItemGroup>
+        </ItemGroup>
+
+        <ItemGroup>
+                <PackageReference Include="System.Management" Version="8.0.0" />
+                <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.0" />
+        </ItemGroup>
 </Project>

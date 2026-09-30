@@ -16,10 +16,10 @@ jobs:
           - os: ubuntu-latest
             rid: linux-x64
             artifact: performance-monitor-linux-x64
-          - os: macos-14
+          - os: macos-13
             rid: osx-x64
             artifact: performance-monitor-macos-x64
-          - os: macos-latest
+          - os: macos-14
             rid: osx-arm64
             artifact: performance-monitor-macos-arm64
     runs-on: ${{ matrix.os }}
@@ -28,6 +28,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+          cache: true
+          cache-dependency-path: "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
       - name: Publish
         run: >
           dotnet publish "Performance Monitor/Performance Monitor/Performance Monitor.csproj"

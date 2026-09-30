@@ -297,9 +297,30 @@ public partial class WifiViewModel : ViewModelBase
 
             return new WifiDetails(status, ssid, connectionType, signalStrength);
         }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            string status = "Disconnected";
+            string ssid = "Not connected";
+            string connectionType = "-";
+            string signal = "-";
+
+            // macOS 14+ may require Location Services permission for this to return
+            // an SSID. If it doesn't, we correctly report Disconnected — we never
+            // fabricate a connection.
+            string output = ExecuteCommand("networksetup", "-getairportnetwork en0");
+            var match = Regex.Match(output, @"Current Wi-Fi Network:\s*(.+)$", RegexOptions.Multiline);
+            if (match.Success)
+            {
+                ssid = match.Groups[1].Value.Trim();
+                status = "Connected";
+                connectionType = "802.11";
+            }
+
+            return new WifiDetails(status, ssid, connectionType, signal);
+        }
         else
         {
-            return new WifiDetails("Connected", "Connected", "802.11", "📶 Connected");
+            return new WifiDetails("Disconnected", "Not connected", "-", "-");
         }
     }
 
