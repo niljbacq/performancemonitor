@@ -29,10 +29,12 @@ jobs:
         with:
           dotnet-version: '8.0.x'
           cache: true
-          cache-dependency-path: "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
+          cache-dependency-path: |
+            PerformanceMonitor.Shared/PerformanceMonitor.Shared.csproj
+            PerformanceMonitor.Desktop/PerformanceMonitor.Desktop.csproj
       - name: Publish
         run: >
-          dotnet publish "Performance Monitor/Performance Monitor/Performance Monitor.csproj"
+          dotnet publish "PerformanceMonitor.Desktop/PerformanceMonitor.Desktop.csproj"
           -c Release -r ${{ matrix.rid }} --self-contained true
           -p:PublishSingleFile=true -o publish
       - uses: actions/upload-artifact@v4

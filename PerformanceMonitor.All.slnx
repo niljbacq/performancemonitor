@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="PerformanceMonitor.Desktop/PerformanceMonitor.Desktop.csproj" />
+  <Project Path="PerformanceMonitor.Shared/PerformanceMonitor.Shared.csproj" />
+</Solution>
