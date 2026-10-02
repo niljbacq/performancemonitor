@@ -124,40 +124,60 @@ internal static class CommandRunner
     }
 }
 
-// ---- Factory (macOS branches removed) ----
+// ---- Factory (Android-aware) ----
 
 public static class ProviderFactory
 {
+    // Heads that need platform APIs (Android) register their providers here
+    // at startup, before any ViewModel is created.
+    public static Func<ICpuProvider>? CpuFactory { get; set; }
+    public static Func<IGpuProvider>? GpuFactory { get; set; }
+    public static Func<IDiskProvider>? DiskFactory { get; set; }
+    public static Func<IWifiProvider>? WifiFactory { get; set; }
+    public static Func<IMemoryProvider>? MemoryFactory { get; set; }
+
     public static ICpuProvider CreateCpu()
     {
+        if (CpuFactory != null) return CpuFactory();
+        if (OperatingSystem.IsAndroid()) return new NullCpuProvider();
         if (OperatingSystem.IsWindows()) return new WindowsCpuProvider();
         if (OperatingSystem.IsLinux()) return new LinuxCpuProvider();
-        throw Unsupported("CPU");
+        return new NullCpuProvider();
     }
 
     public static IGpuProvider CreateGpu()
     {
+        if (GpuFactory != null) return GpuFactory();
+        if (OperatingSystem.IsAndroid()) return new NullGpuProvider();
         if (OperatingSystem.IsWindows()) return new WindowsGpuProvider();
         if (OperatingSystem.IsLinux()) return new LinuxGpuProvider();
-        throw Unsupported("GPU");
+        return new NullGpuProvider();
     }
 
     public static IDiskProvider CreateDisk()
     {
+        if (DiskFactory != null) return DiskFactory();
+        if (OperatingSystem.IsAndroid()) return new NullDiskProvider();
         if (OperatingSystem.IsWindows()) return new WindowsDiskProvider();
         if (OperatingSystem.IsLinux()) return new LinuxDiskProvider();
-        throw Unsupported("Disk");
+        return new NullDiskProvider();
     }
 
     public static IWifiProvider CreateWifi()
     {
+        if (WifiFactory != null) return WifiFactory();
+        if (OperatingSystem.IsAndroid()) return new NullWifiProvider();
         if (OperatingSystem.IsWindows()) return new WindowsWifiProvider();
         if (OperatingSystem.IsLinux()) return new LinuxWifiProvider();
-        throw Unsupported("WiFi");
+        return new NullWifiProvider();
     }
 
-    public static IMemoryProvider CreateMemory() => new HardwareInfoMemoryProvider();
-
-    private static PlatformNotSupportedException Unsupported(string what)
-        => new($"{what} monitoring is not supported on this operating system.");
+    public static IMemoryProvider CreateMemory()
+    {
+        if (MemoryFactory != null) return MemoryFactory();
+        if (OperatingSystem.IsAndroid()) return new NullMemoryProvider();
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
+            return new HardwareInfoMemoryProvider();
+        return new NullMemoryProvider();
+    }
 }
