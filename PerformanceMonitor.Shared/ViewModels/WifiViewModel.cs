@@ -1,101 +1,59 @@
 ﻿using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using TaskManager.Providers;
 
 namespace TaskManager.ViewModels;
 
 public partial class WifiViewModel : ViewModelBase
 {
     private string _adapterName = "Wi-Fi";
-    public string AdapterName
-    {
-        get => _adapterName;
-        set => SetProperty(ref _adapterName, value);
-    }
+    public string AdapterName { get => _adapterName; set => SetProperty(ref _adapterName, value); }
 
     private string _status = "Disconnected";
-    public string Status
-    {
-        get => _status;
-        set => SetProperty(ref _status, value);
-    }
+    public string Status { get => _status; set => SetProperty(ref _status, value); }
 
     private string _sendSpeed = "0 Kbps";
-    public string SendSpeed
-    {
-        get => _sendSpeed;
-        set => SetProperty(ref _sendSpeed, value);
-    }
+    public string SendSpeed { get => _sendSpeed; set => SetProperty(ref _sendSpeed, value); }
 
     private string _receiveSpeed = "0 Kbps";
-    public string ReceiveSpeed
-    {
-        get => _receiveSpeed;
-        set => SetProperty(ref _receiveSpeed, value);
-    }
+    public string ReceiveSpeed { get => _receiveSpeed; set => SetProperty(ref _receiveSpeed, value); }
 
     private double _sendValue = 0;
-    public double SendValue
-    {
-        get => _sendValue;
-        set => SetProperty(ref _sendValue, value);
-    }
+    public double SendValue { get => _sendValue; set => SetProperty(ref _sendValue, value); }
 
     private double _receiveValue = 0;
-    public double ReceiveValue
-    {
-        get => _receiveValue;
-        set => SetProperty(ref _receiveValue, value);
-    }
+    public double ReceiveValue { get => _receiveValue; set => SetProperty(ref _receiveValue, value); }
 
     private string _ssid = "Not connected";
-    public string Ssid
-    {
-        get => _ssid;
-        set => SetProperty(ref _ssid, value);
-    }
+    public string Ssid { get => _ssid; set => SetProperty(ref _ssid, value); }
 
     private string _connectionType = "-";
-    public string ConnectionType
-    {
-        get => _connectionType;
-        set => SetProperty(ref _connectionType, value);
-    }
+    public string ConnectionType { get => _connectionType; set => SetProperty(ref _connectionType, value); }
 
     private string _ipv4Address = "-";
-    public string Ipv4Address
-    {
-        get => _ipv4Address;
-        set => SetProperty(ref _ipv4Address, value);
-    }
+    public string Ipv4Address { get => _ipv4Address; set => SetProperty(ref _ipv4Address, value); }
 
     private string _ipv6Address = "-";
-    public string Ipv6Address
-    {
-        get => _ipv6Address;
-        set => SetProperty(ref _ipv6Address, value);
-    }
+    public string Ipv6Address { get => _ipv6Address; set => SetProperty(ref _ipv6Address, value); }
 
     private string _signalStrength = "-";
-    public string SignalStrength
-    {
-        get => _signalStrength;
-        set => SetProperty(ref _signalStrength, value);
-    }
+    public string SignalStrength { get => _signalStrength; set => SetProperty(ref _signalStrength, value); }
 
     public string AdapterNameLabel { get; } = "Wi-Fi";
 
-    public WifiViewModel()
+    private readonly IWifiProvider _provider;
+
+    public WifiViewModel() : this(ProviderFactory.CreateWifi()) { }
+
+    public WifiViewModel(IWifiProvider provider)
     {
+        _provider = provider;
         _ = StartNetworkMonitoringAsync();
     }
 
@@ -107,12 +65,6 @@ public partial class WifiViewModel : ViewModelBase
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
 
-        // Resume off the UI thread. UpdateWifiDetails() can spawn 1-3 external
-        // processes (netsh / nmcli / iwconfig / iw), each of which is allowed to
-        // block for up to 2 seconds waiting for the process to exit - previously
-        // that ran synchronously on the UI thread every single second, which was
-        // by far the biggest contributor to the app stuttering while its window
-        // was being dragged.
         while (await timer.WaitForNextTickAsync().ConfigureAwait(false))
         {
             tick++;
@@ -151,11 +103,7 @@ public partial class WifiViewModel : ViewModelBase
                     continue;
                 }
 
-                // Adapter/SSID/signal details require spawning an external process -
-                // that's expensive and doesn't change second-to-second, so refresh
-                // it only every 5th tick. Bandwidth (below) still updates every tick,
-                // since it's cheap (pure managed NetworkInterface API, no subprocess).
-                WifiDetails? details = tick % 5 == 1 ? GetWifiDetails(wifiInterface.Name) : null;
+                WifiDetails? details = tick % 5 == 1 ? _provider.GetDetails(wifiInterface.Name) : null;
 
                 var ipProps = wifiInterface.GetIPProperties();
                 var ipv4 = ipProps.UnicastAddresses
@@ -218,112 +166,6 @@ public partial class WifiViewModel : ViewModelBase
         }
     }
 
-    private sealed record WifiDetails(string Status, string Ssid, string ConnectionType, string SignalStrength);
-
-    private WifiDetails GetWifiDetails(string interfaceName)
-    {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            string output = ExecuteCommand("netsh", "wlan show interfaces");
-
-            var stateMatch = Regex.Match(output, @"^\s*State\s*:\s*(.+)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-            string state = stateMatch.Success ? stateMatch.Groups[1].Value.Trim() : "Disconnected";
-
-            if (state.Equals("connected", StringComparison.OrdinalIgnoreCase))
-            {
-                var ssidMatch = Regex.Match(output, @"^\s*SSID\s*:\s*(.+)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-                string ssid = ssidMatch.Success && !string.IsNullOrWhiteSpace(ssidMatch.Groups[1].Value)
-                    ? ssidMatch.Groups[1].Value.Trim()
-                    : "Connected";
-
-                var radioMatch = Regex.Match(output, @"^\s*Radio type\s*:\s*(.+)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-                string connectionType = radioMatch.Success ? radioMatch.Groups[1].Value.Trim() : "Unknown";
-
-                var signalMatch = Regex.Match(output, @"^\s*Signal\s*:\s*(.+)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-                string signal = signalMatch.Success ? $"📶 {signalMatch.Groups[1].Value.Trim()}" : "-";
-
-                return new WifiDetails("Connected", ssid, connectionType, signal);
-            }
-
-            return new WifiDetails("Disconnected", "Not connected", "Unknown", "-");
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            string status = "Disconnected";
-            string ssid = "Not connected";
-            string signalStrength = "-";
-            bool detected = false;
-
-            string nmcliOutput = ExecuteCommand("nmcli", "-t -f active,ssid,signal dev wifi");
-            if (!string.IsNullOrWhiteSpace(nmcliOutput))
-            {
-                foreach (var line in nmcliOutput.Split('\n'))
-                {
-                    if (line.StartsWith("yes:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var parts = line.Split(':');
-                        if (parts.Length >= 3)
-                        {
-                            status = "Connected";
-                            ssid = parts[1];
-                            signalStrength = $"📶 {parts[2]}%";
-                            detected = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!detected)
-            {
-                string iwOutput = ExecuteCommand("iwconfig", interfaceName);
-
-                var ssidMatch = Regex.Match(iwOutput, @"ESSID:""([^""]+)""");
-                if (ssidMatch.Success)
-                {
-                    status = "Connected";
-                    ssid = ssidMatch.Groups[1].Value;
-                }
-
-                var signalMatch = Regex.Match(iwOutput, @"Link Quality=(\d+/\d+)");
-                signalStrength = signalMatch.Success ? $"📶 {signalMatch.Groups[1].Value}" : "-";
-            }
-
-            string iwDevOutput = ExecuteCommand("iw", $"dev {interfaceName} link");
-            var freqMatch = Regex.Match(iwDevOutput, @"freq:\s*(\d+)");
-            string connectionType = freqMatch.Success && int.TryParse(freqMatch.Groups[1].Value, out int freq)
-                ? (freq > 5000 ? "802.11ac/ax (5GHz)" : "802.11n/ax (2.4GHz)")
-                : "802.11 Wireless";
-
-            return new WifiDetails(status, ssid, connectionType, signalStrength);
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            string status = "Disconnected";
-            string ssid = "Not connected";
-            string connectionType = "-";
-            string signal = "-";
-
-            // macOS 14+ may require Location Services permission for this to return
-            // an SSID. If it doesn't, we correctly report Disconnected — we never
-            // fabricate a connection.
-            string output = ExecuteCommand("networksetup", "-getairportnetwork en0");
-            var match = Regex.Match(output, @"Current Wi-Fi Network:\s*(.+)$", RegexOptions.Multiline);
-            if (match.Success)
-            {
-                ssid = match.Groups[1].Value.Trim();
-                status = "Connected";
-                connectionType = "802.11";
-            }
-
-            return new WifiDetails(status, ssid, connectionType, signal);
-        }
-        else
-        {
-            return new WifiDetails("Disconnected", "Not connected", "-", "-");
-        }
-    }
-
     private void PostResetToDisconnectedState(string adapter)
     {
         Dispatcher.UIThread.Post(() => ResetToDisconnectedState(adapter));
@@ -340,33 +182,6 @@ public partial class WifiViewModel : ViewModelBase
         }
 
         return $"{Math.Round(kbps, 0)} Kbps";
-    }
-
-    private string ExecuteCommand(string command, string arguments)
-    {
-        try
-        {
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = command,
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            string result = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(2000);
-            return result;
-        }
-        catch
-        {
-            return string.Empty;
-        }
     }
 
     private void ResetToDisconnectedState(string adapter)

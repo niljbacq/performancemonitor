@@ -1,24 +1,23 @@
-﻿using System;
 using Hardware.Info;
+using System;
 
-namespace TaskManager.ViewModels;
+namespace TaskManager.Providers;
 
-public class MemoryMonitor
+public sealed class HardwareInfoMemoryProvider : IMemoryProvider
 {
     private readonly HardwareInfo _hardwareInfo = new();
 
-    public (double TotalGB, double UsedGB, double Percent) GetLiveMemoryUsage()
+    public MemoryUsage GetUsage()
     {
         _hardwareInfo.RefreshMemoryStatus();
 
         ulong totalBytes = _hardwareInfo.MemoryStatus.TotalPhysical;
-        ulong availableBytes = _hardwareInfo.MemoryStatus.AvailablePhysical;
-        ulong usedBytes = totalBytes - availableBytes;
+        ulong usedBytes = totalBytes - _hardwareInfo.MemoryStatus.AvailablePhysical;
 
         double totalGB = Math.Round(totalBytes / (1024.0 * 1024.0 * 1024.0), 1);
         double usedGB = Math.Round(usedBytes / (1024.0 * 1024.0 * 1024.0), 1);
         double percent = Math.Round((usedGB / totalGB) * 100, 0);
 
-        return (totalGB, usedGB, percent);
+        return new MemoryUsage(totalGB, usedGB, percent);
     }
 }

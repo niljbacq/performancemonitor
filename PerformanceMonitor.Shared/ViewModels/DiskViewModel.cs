@@ -1,419 +1,112 @@
 ﻿using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Hardware.Info;
 using System;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Management;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using TaskManager.Providers;
 
 namespace TaskManager.ViewModels;
 
 public partial class DiskViewModel : ViewModelBase
 {
-    private readonly HardwareInfo _hardwareInfo = new();
-    private PerformanceCounter? _diskReadCounter;
-    private PerformanceCounter? _diskWriteCounter;
-    private PerformanceCounter? _idleTimeCounter;
-    private PerformanceCounter? _responseTimeCounter;
-
     private string _diskName = "Disk";
-    public string DiskName
-    {
-        get => _diskName;
-        set => SetProperty(ref _diskName, value);
-    }
+    public string DiskName { get => _diskName; set => SetProperty(ref _diskName, value); }
 
     private string _modelName = "Detecting Disk...";
-    public string ModelName
-    {
-        get => _modelName;
-        set => SetProperty(ref _modelName, value);
-    }
+    public string ModelName { get => _modelName; set => SetProperty(ref _modelName, value); }
 
-    // Dynamic Live Stats
     private string _activeTime = "0%";
-    public string ActiveTime
-    {
-        get => _activeTime;
-        set => SetProperty(ref _activeTime, value);
-    }
+    public string ActiveTime { get => _activeTime; set => SetProperty(ref _activeTime, value); }
 
     private double _activeTimeValue = 0;
-    public double ActiveTimeValue
-    {
-        get => _activeTimeValue;
-        set => SetProperty(ref _activeTimeValue, value);
-    }
+    public double ActiveTimeValue { get => _activeTimeValue; set => SetProperty(ref _activeTimeValue, value); }
 
     private string _averageResponseTime = "0.0 ms";
-    public string AverageResponseTime
-    {
-        get => _averageResponseTime;
-        set => SetProperty(ref _averageResponseTime, value);
-    }
+    public string AverageResponseTime { get => _averageResponseTime; set => SetProperty(ref _averageResponseTime, value); }
 
     private string _readSpeed = "0 KB/s";
-    public string ReadSpeed
-    {
-        get => _readSpeed;
-        set => SetProperty(ref _readSpeed, value);
-    }
+    public string ReadSpeed { get => _readSpeed; set => SetProperty(ref _readSpeed, value); }
 
     private string _writeSpeed = "0 KB/s";
-    public string WriteSpeed
-    {
-        get => _writeSpeed;
-        set => SetProperty(ref _writeSpeed, value);
-    }
+    public string WriteSpeed { get => _writeSpeed; set => SetProperty(ref _writeSpeed, value); }
 
-    // Hardware Technical Specs
     private string _capacity = "-";
-    public string Capacity
-    {
-        get => _capacity;
-        set => SetProperty(ref _capacity, value);
-    }
+    public string Capacity { get => _capacity; set => SetProperty(ref _capacity, value); }
 
     private string _formatted = "-";
-    public string Formatted
-    {
-        get => _formatted;
-        set => SetProperty(ref _formatted, value);
-    }
+    public string Formatted { get => _formatted; set => SetProperty(ref _formatted, value); }
 
     private string _systemDisk = "No";
-    public string SystemDisk
-    {
-        get => _systemDisk;
-        set => SetProperty(ref _systemDisk, value);
-    }
+    public string SystemDisk { get => _systemDisk; set => SetProperty(ref _systemDisk, value); }
 
     private string _pageFile = "No";
-    public string PageFile
-    {
-        get => _pageFile;
-        set => SetProperty(ref _pageFile, value);
-    }
+    public string PageFile { get => _pageFile; set => SetProperty(ref _pageFile, value); }
 
     private string _type = "Unknown";
-    public string Type
-    {
-        get => _type;
-        set => SetProperty(ref _type, value);
-    }
+    public string Type { get => _type; set => SetProperty(ref _type, value); }
 
-    public DiskViewModel()
+    private readonly IDiskProvider _provider;
+
+    public DiskViewModel() : this(ProviderFactory.CreateDisk()) { }
+
+    public DiskViewModel(IDiskProvider provider)
     {
-        InitPerformanceCounters();
+        _provider = provider;
         _ = LoadDiskSpecsAsync();
         _ = StartMonitoringAsync();
     }
 
-    private void InitPerformanceCounters()
-    {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            try
-            {
-                _diskReadCounter = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
-                _diskWriteCounter = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
-                _idleTimeCounter = new PerformanceCounter("PhysicalDisk", "% Idle Time", "_Total");
-                _responseTimeCounter = new PerformanceCounter("PhysicalDisk", "Avg. Disk sec/Transfer", "_Total");
-
-                _diskReadCounter.NextValue();
-                _diskWriteCounter.NextValue();
-                _idleTimeCounter.NextValue();
-                _responseTimeCounter.NextValue();
-            }
-            catch { }
-        }
-    }
-
     private async Task LoadDiskSpecsAsync()
     {
-        await Task.Run(() =>
-        {
-            try
-            {
-                // Drive Info & Capacity
-                DriveInfo rootDrive = DriveInfo.GetDrives()
-                    .FirstOrDefault(d => d.IsReady && (d.Name.StartsWith("C") || d.Name == "/"))
-                    ?? DriveInfo.GetDrives().FirstOrDefault(d => d.IsReady)!;
+        var s = await Task.Run(() => _provider.GetSpecs());
 
-                if (rootDrive != null)
-                {
-                    double totalGB = Math.Round(rootDrive.TotalSize / (1024.0 * 1024.0 * 1024.0), 0);
-                    Capacity = $"{totalGB} GB";
-                    Formatted = $"{totalGB} GB";
-
-                    string osDriveLetter = Path.GetPathRoot(Environment.SystemDirectory)?.TrimEnd('\\') ?? "C:";
-                    SystemDisk = rootDrive.Name.StartsWith(osDriveLetter, StringComparison.OrdinalIgnoreCase) ? "Yes" : "No";
-                }
-
-                _hardwareInfo.RefreshDriveList();
-                if (_hardwareInfo.DriveList.Count > 0)
-                {
-                    ModelName = _hardwareInfo.DriveList[0].Model;
-                }
-                else
-                {
-                    ModelName = GetFallbackModelName();
-                }
-
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    LoadWindowsDiskDetails();
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                {
-                    LoadLinuxDiskDetails();
-                }
-            }
-            catch
-            {
-                ModelName = "Generic Storage Device";
-            }
-        });
-    }
-
-    private void LoadWindowsDiskDetails()
-    {
-        try
-        {
-            // Dynamic Disk Index & System Disk Check
-            using var driveSearcher = new ManagementObjectSearcher("SELECT Index, DeviceID FROM Win32_DiskDrive");
-            foreach (var drive in driveSearcher.Get())
-            {
-                string index = drive["Index"]?.ToString() ?? "0";
-                DiskName = $"Disk {index}";
-                break;
-            }
-
-            // Media Type Detection (SSD vs HDD)
-            using var mediaSearcher = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT MediaType, BusType FROM MSFT_PhysicalDisk");
-            foreach (var media in mediaSearcher.Get())
-            {
-                ushort mediaType = Convert.ToUInt16(media["MediaType"]);
-                ushort busType = Convert.ToUInt16(media["BusType"]);
-
-                if (busType == 17) // NVMe Bus Type
-                    Type = "NVMe SSD";
-                else if (mediaType == 4)
-                    Type = "SSD";
-                else if (mediaType == 3)
-                    Type = "HDD";
-                else
-                    Type = "SSD/HDD";
-                break;
-            }
-
-            // Dynamic PageFile Detection
-            using var pageFileSearcher = new ManagementObjectSearcher("SELECT Name FROM Win32_PageFileSetting");
-            PageFile = pageFileSearcher.Get().Count > 0 ? "Yes" : "No";
-        }
-        catch
-        {
-            Type = "SSD";
-        }
-    }
-
-    private void LoadLinuxDiskDetails()
-    {
-        try
-        {
-            DiskName = "Disk 0";
-
-            string? dev = GetPrimaryLinuxBlockDevice() ?? "sda";
-
-            string rotaPath = $"/sys/block/{dev}/queue/rotational";
-            if (File.Exists(rotaPath))
-            {
-                string rota = File.ReadAllText(rotaPath).Trim();
-                Type = rota == "0" ? "SSD" : "HDD";
-            }
-            else if (dev.StartsWith("nvme"))
-            {
-                Type = "NVMe SSD";
-            }
-
-            // Swap/PageFile Check
-            if (File.Exists("/proc/swaps"))
-            {
-                string[] swaps = File.ReadAllLines("/proc/swaps");
-                PageFile = swaps.Length > 1 ? "Yes" : "No";
-            }
-        }
-        catch { }
+        if (s.DiskName != null) DiskName = s.DiskName;
+        if (s.ModelName != null) ModelName = s.ModelName;
+        if (s.Capacity != null) Capacity = s.Capacity;
+        if (s.Formatted != null) Formatted = s.Formatted;
+        if (s.SystemDisk != null) SystemDisk = s.SystemDisk;
+        if (s.PageFile != null) PageFile = s.PageFile;
+        if (s.Type != null) Type = s.Type;
     }
 
     private async Task StartMonitoringAsync()
     {
-        long lastReadBytes = 0;
-        long lastWriteBytes = 0;
-
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
 
-        // Resume off the UI thread - perf-counter reads and /proc/diskstats file IO
-        // have no business blocking window/input handling.
         while (await timer.WaitForNextTickAsync().ConfigureAwait(false))
         {
             try
             {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                var sample = _provider.Sample();
+                if (sample == null) continue;
+
+                Dispatcher.UIThread.Post(() =>
                 {
-                    if (_diskReadCounter != null && _diskWriteCounter != null && _idleTimeCounter != null && _responseTimeCounter != null)
-                    {
-                        float readBytesPerSec = _diskReadCounter.NextValue();
-                        float writeBytesPerSec = _diskWriteCounter.NextValue();
-                        float idlePercent = _idleTimeCounter.NextValue();
-                        float avgResponseSeconds = _responseTimeCounter.NextValue();
-
-                        double activePercent = Math.Clamp(Math.Round(100 - idlePercent), 0, 100);
-                        string activeTimeText = $"{activePercent}%";
-                        string responseText = $"{avgResponseSeconds * 1000.0:F1} ms";
-                        string readText = FormatSpeed(readBytesPerSec);
-                        string writeText = FormatSpeed(writeBytesPerSec);
-
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            ActiveTimeValue = activePercent;
-                            ActiveTime = activeTimeText;
-                            AverageResponseTime = responseText;
-                            ReadSpeed = readText;
-                            WriteSpeed = writeText;
-                        });
-                    }
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                {
-                    string? primaryDev = GetPrimaryLinuxBlockDevice();
-                    if (primaryDev != null && File.Exists("/proc/diskstats"))
-                    {
-                        string[] lines = File.ReadAllLines("/proc/diskstats");
-                        var targetLine = lines.FirstOrDefault(l =>
-                        {
-                            var cols = l.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                            return cols.Length >= 3 && cols[2] == primaryDev;
-                        });
-
-                        if (targetLine != null)
-                        {
-                            var parts = targetLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                            if (parts.Length >= 10)
-                            {
-                                long readSectors = long.Parse(parts[5]);
-                                long writeSectors = long.Parse(parts[9]);
-
-                                int sectorSize = GetLinuxSectorSize();
-                                long currentReadBytes = readSectors * sectorSize;
-                                long currentWriteBytes = writeSectors * sectorSize;
-
-                                if (lastReadBytes > 0 && lastWriteBytes > 0)
-                                {
-                                    long readDiff = Math.Max(0, currentReadBytes - lastReadBytes);
-                                    // Fixed: Subtract lastWriteBytes from currentWriteBytes instead of currentReadBytes
-                                    long writeDiff = Math.Max(0, currentWriteBytes - lastWriteBytes);
-
-                                    string readText = FormatSpeed(readDiff);
-                                    string writeText = FormatSpeed(writeDiff);
-
-                                    Dispatcher.UIThread.Post(() =>
-                                    {
-                                        ReadSpeed = readText;
-                                        WriteSpeed = writeText;
-                                    });
-                                }
-
-                                lastReadBytes = currentReadBytes;
-                                lastWriteBytes = currentWriteBytes;
-                            }
-                        }
-                    }
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                {
-                    // Real macOS read/write bytes require IOKit P/Invoke
-                    // (kIOBlockStorageDriverStatisticsKey). Until that's implemented,
-                    // report N/A rather than stale zeros.
-                    Dispatcher.UIThread.Post(() =>
+                    if (sample.NotSupported)
                     {
                         ReadSpeed = "N/A";
                         WriteSpeed = "N/A";
-                    });
-                }
+                        return;
+                    }
+
+                    if (sample.ReadBytesPerSec is double r) ReadSpeed = FormatSpeed(r);
+                    if (sample.WriteBytesPerSec is double w) WriteSpeed = FormatSpeed(w);
+                    if (sample.ActivePercent is double a)
+                    {
+                        ActiveTimeValue = a;
+                        ActiveTime = $"{a}%";
+                    }
+                    if (sample.ResponseMs is double ms) AverageResponseTime = $"{ms:F1} ms";
+                });
             }
             catch { }
         }
     }
 
-    private string? GetPrimaryLinuxBlockDevice()
-    {
-        try
-        {
-            foreach (var line in File.ReadAllLines("/proc/mounts"))
-            {
-                var cols = line.Split(' ');
-                if (cols.Length < 2 || cols[1] != "/") continue;
-
-                string dev = cols[0];
-                if (!dev.StartsWith("/dev/")) continue;
-
-                string name = Path.GetFileName(dev);
-
-                foreach (var block in Directory.GetDirectories("/sys/block")
-                                               .Select(Path.GetFileName))
-                {
-                    if (name == block || name.StartsWith(block))
-                        return block;
-                }
-            }
-        }
-        catch { }
-        return null;
-    }
-
-    private int GetLinuxSectorSize()
-    {
-        try
-        {
-            string? dev = GetPrimaryLinuxBlockDevice();
-            if (dev != null)
-            {
-                string path = $"/sys/block/{dev}/queue/hw_sector_size";
-                if (File.Exists(path) &&
-                    int.TryParse(File.ReadAllText(path).Trim(), out int size))
-                    return size;
-            }
-        }
-        catch { }
-        return 512;
-    }
-
-    private string GetFallbackModelName()
-    {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            string? dev = GetPrimaryLinuxBlockDevice();
-            if (dev != null)
-            {
-                string path = $"/sys/block/{dev}/device/model";
-                if (File.Exists(path))
-                    return File.ReadAllText(path).Trim();
-            }
-        }
-        return "System Storage Device";
-    }
-
-    private string FormatSpeed(double bytesPerSec)
+    private static string FormatSpeed(double bytesPerSec)
     {
         if (bytesPerSec >= 1024 * 1024)
-        {
             return $"{Math.Round(bytesPerSec / (1024.0 * 1024.0), 1)} MB/s";
-        }
         return $"{Math.Round(bytesPerSec / 1024.0, 0)} KB/s";
     }
 }
