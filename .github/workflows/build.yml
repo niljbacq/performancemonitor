@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
           cache: true
           cache-dependency-path: |
             PerformanceMonitor.Shared/PerformanceMonitor.Shared.csproj
@@ -31,7 +31,89 @@ jobs:
           dotnet publish "PerformanceMonitor.Desktop/PerformanceMonitor.Desktop.csproj"
           -c Release -r ${{ matrix.rid }} --self-contained true
           -p:PublishSingleFile=true -o publish
+      - name: Smoke test (dump hardware info)
+        run: ./publish/PerformanceMonitor --dump
+        continue-on-error: true
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: publish/
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Lets later steps test "is a keystore configured?" (the secrets context can't be used in `if:`)
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '21'
+
+      - name: Install .NET Android workload
+        run: dotnet workload install android
+
+      - name: Install Android SDK components
+        run: |
+          mkdir -p "$HOME/android-sdk"
+          dotnet build PerformanceMonitor.Android/PerformanceMonitor.Android.csproj \
+            -t:InstallAndroidDependencies -f net10.0-android \
+            -p:AndroidSdkDirectory="$HOME/android-sdk" \
+            -p:JavaSdkDirectory="$JAVA_HOME" \
+            -p:AcceptAndroidSdkLicenses=True
+
+      - name: Decode release keystore
+        if: env.KEYSTORE_B64 != ''
+        run: echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+
+      - name: Publish APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          SIGN_ARGS=()
+          if [ -n "$KEYSTORE_B64" ]; then
+            SIGN_ARGS=(
+              -p:AndroidKeyStore=true
+              "-p:AndroidSigningKeyStore=$RUNNER_TEMP/release.keystore"
+              "-p:AndroidSigningKeyAlias=$ANDROID_KEY_ALIAS"
+              -p:AndroidSigningKeyPass=env:ANDROID_KEYSTORE_PASSWORD
+              -p:AndroidSigningStorePass=env:ANDROID_KEYSTORE_PASSWORD
+            )
+          else
+            echo "No keystore secret found: building with the default debug key (test builds only)."
+          fi
+
+          dotnet publish PerformanceMonitor.Android/PerformanceMonitor.Android.csproj \
+            -f net10.0-android -c Release \
+            -p:AndroidSdkDirectory="$HOME/android-sdk" \
+            -p:JavaSdkDirectory="$JAVA_HOME" \
+            -p:AndroidPackageFormats=apk \
+            -p:PublishTrimmed=false \
+            -p:ApplicationVersion=${{ github.run_number }} \
+            -p:ApplicationDisplayVersion=1.0.${{ github.run_number }} \
+            "${SIGN_ARGS[@]}"
+
+      - name: Collect APK
+        run: |
+          mkdir -p apk-out
+          f=$(find PerformanceMonitor.Android/bin/Release -iname '*-signed.apk' | head -n 1)
+          if [ -z "$f" ]; then
+            echo "No signed APK found. Package files present:"
+            find PerformanceMonitor.Android/bin/Release \( -name '*.apk' -o -name '*.aab' \)
+            exit 1
+          fi
+          cp "$f" "apk-out/PerformanceMonitor-android-${{ github.run_number }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: performance-monitor-android
+          path: apk-out/*.apk
+          if-no-files-found: error
