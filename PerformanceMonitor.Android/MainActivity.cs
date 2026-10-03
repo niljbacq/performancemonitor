@@ -12,4 +12,17 @@ namespace TaskManager.Droid;
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode)]
 public class MainActivity : AvaloniaMainActivity
 {
+    private const int LocationRequestCode = 1001;
+
+    protected override void OnCreate(Android.OS.Bundle? savedInstanceState)
+    {
+        base.OnCreate(savedInstanceState);
+        RequestLocationPermissionIfNeeded();
+    }
+
+    private void RequestLocationPermissionIfNeeded()
+    {
+        if (CheckSelfPermission(Android.Manifest.Permission.AccessFineLocation) == Permission.Granted) return;
+        RequestPermissions(new[] { Android.Manifest.Permission.AccessFineLocation }, LocationRequestCode);
+    }
 }

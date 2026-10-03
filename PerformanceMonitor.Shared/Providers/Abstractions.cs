@@ -36,6 +36,7 @@ public sealed class GpuSample
     public double? TemperatureC { get; set; }
     public string? MemoryUsage { get; set; }
     public string? UtilizationText { get; set; }
+    public string? TemperatureText { get; set; }
 }
 
 public sealed class DiskSpecs
@@ -56,6 +57,7 @@ public sealed class DiskSample
     public double? ActivePercent { get; set; }
     public double? ResponseMs { get; set; }
     public bool NotSupported { get; set; }
+    public string? NotSupportedMessage { get; set; }
 }
 
 public sealed record WifiDetails(string Status, string Ssid, string ConnectionType, string SignalStrength);
@@ -69,6 +71,11 @@ public interface ICpuProvider
     CpuSpecs GetSpecs();
     float GetUsagePercent();
     ProcessStats GetProcessStats();
+
+    // Optional capabilities. Defaults keep Windows/Linux behavior unchanged.
+    long UptimeMilliseconds => Environment.TickCount64;
+    string? UsageUnavailableMessage => null;
+    string? ProcessStatsUnavailableMessage => null;
 }
 
 public interface IGpuProvider
@@ -86,7 +93,14 @@ public interface IDiskProvider
 public interface IWifiProvider
 {
     WifiDetails GetDetails(string interfaceName);
+
+    // Platforms that can't use NetworkInterface (Android) return a full snapshot here.
+    WifiSnapshot? GetSnapshot() => null;
 }
+
+public sealed record WifiSnapshot(
+    string AdapterName, string Status, string Ssid, string ConnectionType, string SignalStrength,
+    string Ipv4Address, string Ipv6Address, long? BytesSent, long? BytesReceived);
 
 public interface IMemoryProvider
 {

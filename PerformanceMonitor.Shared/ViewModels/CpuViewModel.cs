@@ -94,17 +94,21 @@ public partial class CpuViewModel : ViewModelBase
             tick++;
             try
             {
-                int cpuPercent = (int)Math.Round(_provider.GetUsagePercent());
+                float rawUsage = _provider.GetUsagePercent();
+                string? usageNote = _provider.UsageUnavailableMessage;
+                int cpuPercent = (int)Math.Round(rawUsage);
 
-                TimeSpan up = TimeSpan.FromMilliseconds(Environment.TickCount64);
+                TimeSpan up = TimeSpan.FromMilliseconds(_provider.UptimeMilliseconds);
                 string uptimeText = $"{up.Days}:{up.Hours:D2}:{up.Minutes:D2}:{up.Seconds:D2}";
 
-                ProcessStats? stats = tick % 3 == 1 ? _provider.GetProcessStats() : null;
+                bool statsDue = tick % 3 == 1;
+                string? statsNote = _provider.ProcessStatsUnavailableMessage;
+                ProcessStats? stats = statsDue && statsNote == null ? _provider.GetProcessStats() : null;
 
                 Dispatcher.UIThread.Post(() =>
                 {
-                    UtilizationValue = cpuPercent;
-                    Utilization = $"{cpuPercent}%";
+                    UtilizationValue = usageNote == null ? cpuPercent : 0;
+                    Utilization = usageNote ?? $"{cpuPercent}%";
                     Uptime = uptimeText;
 
                     if (stats != null)
@@ -112,6 +116,12 @@ public partial class CpuViewModel : ViewModelBase
                         Processes = stats.Processes.ToString();
                         Threads = stats.Threads.ToString();
                         Handles = stats.Handles;
+                    }
+                    else if (statsDue && statsNote != null)
+                    {
+                        Processes = statsNote;
+                        Threads = statsNote;
+                        Handles = statsNote;
                     }
                 });
             }

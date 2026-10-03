@@ -70,6 +70,66 @@ public partial class WifiViewModel : ViewModelBase
             tick++;
             try
             {
+                var snap = _provider.GetSnapshot();
+                if (snap != null)
+                {
+                    string? sendText = null, receiveText = null;
+                    double? sendKbps = null, receiveKbps = null;
+                    bool connected = snap.Status == "Connected";
+
+                    if (connected && snap.BytesSent.HasValue && snap.BytesReceived.HasValue)
+                    {
+                        long sent = snap.BytesSent.Value;
+                        long received = snap.BytesReceived.Value;
+
+                        if (oldBytesSent > 0 && oldBytesReceived > 0)
+                        {
+                            double bitsSent = Math.Max(0, sent - oldBytesSent) * 8.0;
+                            double bitsReceived = Math.Max(0, received - oldBytesReceived) * 8.0;
+                            sendKbps = bitsSent / 1000.0;
+                            receiveKbps = bitsReceived / 1000.0;
+                            sendText = FormatBitrate(bitsSent);
+                            receiveText = FormatBitrate(bitsReceived);
+                        }
+
+                        oldBytesSent = sent;
+                        oldBytesReceived = received;
+                    }
+                    else
+                    {
+                        oldBytesSent = 0;
+                        oldBytesReceived = 0;
+                        if (connected)
+                        {
+                            sendText = receiveText = "Not available on Android";
+                            sendKbps = receiveKbps = 0;
+                        }
+                    }
+
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!connected)
+                        {
+                            ResetToDisconnectedState(snap.AdapterName);
+                            return;
+                        }
+
+                        AdapterName = snap.AdapterName;
+                        Status = snap.Status;
+                        Ssid = snap.Ssid;
+                        ConnectionType = snap.ConnectionType;
+                        SignalStrength = snap.SignalStrength;
+                        Ipv4Address = snap.Ipv4Address;
+                        Ipv6Address = snap.Ipv6Address;
+
+                        if (sendKbps.HasValue) SendValue = sendKbps.Value;
+                        if (receiveKbps.HasValue) ReceiveValue = receiveKbps.Value;
+                        if (sendText != null) SendSpeed = sendText;
+                        if (receiveText != null) ReceiveSpeed = receiveText;
+                    });
+                    continue;
+                }
+
                 NetworkInterface? wifiInterface = NetworkInterface.GetAllNetworkInterfaces()
                     .FirstOrDefault(nic => (nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ||
                                             nic.Name.StartsWith("wlan", StringComparison.OrdinalIgnoreCase) ||

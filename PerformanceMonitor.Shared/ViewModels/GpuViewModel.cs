@@ -85,6 +85,7 @@ public partial class GpuViewModel : ViewModelBase
                     }
                     if (sample.UtilizationText != null) Utilization = sample.UtilizationText;
                     if (sample.TemperatureC is double t) Temperature = $"{t} °C";
+                    if (sample.TemperatureText != null) Temperature = sample.TemperatureText;
                     if (sample.MemoryUsage != null) MemoryUsage = sample.MemoryUsage;
                 });
             }

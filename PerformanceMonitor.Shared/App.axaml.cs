@@ -22,12 +22,15 @@ public partial class App : Application
                 DataContext = new MainViewModel(),
             };
         }
+        else if (ApplicationLifetime is IActivityApplicationLifetime activityLifetime)
+        {
+            // Android may build the view more than once, so create ONE view model and share it.
+            var vm = new MainViewModel();
+            activityLifetime.MainViewFactory = () => new MainView { DataContext = vm };
+        }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
         {
-            singleView.MainView = new MainView
-            {
-                DataContext = new MainViewModel(),
-            };
+            singleView.MainView = new MainView { DataContext = new MainViewModel() };
         }
 
         base.OnFrameworkInitializationCompleted();

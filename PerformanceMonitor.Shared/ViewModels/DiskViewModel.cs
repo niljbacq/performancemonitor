@@ -84,8 +84,14 @@ public partial class DiskViewModel : ViewModelBase
                 {
                     if (sample.NotSupported)
                     {
-                        ReadSpeed = "N/A";
-                        WriteSpeed = "N/A";
+                        string msg = sample.NotSupportedMessage ?? "N/A";
+                        ReadSpeed = msg;
+                        WriteSpeed = msg;
+                        if (sample.NotSupportedMessage != null)
+                        {
+                            ActiveTime = msg;
+                            AverageResponseTime = msg;
+                        }
                         return;
                     }
 
