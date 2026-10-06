@@ -131,6 +131,7 @@ public sealed class LinuxDiskProvider : DiskProviderBase
     private string? _dev;
     private bool _devResolved;
     private long _lastReadBytes, _lastWriteBytes;
+    private bool _haveBaseline = false;
 
     private const int DiskstatsSectorBytes = 512;
 

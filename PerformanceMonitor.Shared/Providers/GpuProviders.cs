@@ -151,14 +151,46 @@ public sealed class LinuxGpuProvider : IGpuProvider
                 return new GpuSample { Utilization = util, TemperatureC = temp };
         }
 
+        double? gpuUtil = null;
+
+        // Primary: standard amdgpu sysfs path
         try
         {
             const string path = "/sys/class/drm/card0/device/gpu_busy_percent";
             if (File.Exists(path) && double.TryParse(File.ReadAllText(path).Trim(), out double busy))
-                return new GpuSample { Utilization = busy };
+                gpuUtil = busy;
         }
         catch { }
 
-        return null;
+        // Fallback: debugfs amdgpu_pm_info (newer kernels, sometimes readable when sysfs is not)
+        if (gpuUtil is null)
+        {
+            try
+            {
+                const string debugPath = "/sys/kernel/debug/dri/0/amdgpu_pm_info";
+                if (File.Exists(debugPath))
+                {
+                    foreach (var line in File.ReadAllLines(debugPath))
+                    {
+                        if (line.Contains("GPU Load", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var tokens = line.Split(new[] { ':', '%', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                            foreach (var token in tokens)
+                            {
+                                if (double.TryParse(token.Trim(), out double v) && v >= 0 && v <= 100)
+                                {
+                                    gpuUtil = v;
+                                    break;
+                                }
+                            }
+                            if (gpuUtil is not null) break;
+                        }
+                    }
+                }
+            }
+            catch { }  // debugfs is often root-only; ignore failures
+        }
+
+        return gpuUtil is double u ? new GpuSample { Utilization = u } : null;
     }
 }
