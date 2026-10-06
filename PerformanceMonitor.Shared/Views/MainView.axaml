@@ -233,8 +233,8 @@
                                 </StackPanel>
                             </StackPanel>
 
-                            <Grid Grid.Column="1" ColumnDefinitions="*, Auto">
-                                <StackPanel Grid.Column="0" Spacing="4">
+                            <Grid Grid.Column="1" ColumnDefinitions="Auto, *">
+                                <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,12,0">
                                     <TextBlock Text="Base speed:" Foreground="#888888"/>
                                     <TextBlock Text="Sockets:" Foreground="#888888"/>
                                     <TextBlock Text="Cores:" Foreground="#888888"/>
@@ -245,15 +245,15 @@
                                     <TextBlock Text="L3 cache:" Foreground="#888888"/>
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
-                                    <TextBlock Text="{Binding BaseSpeed}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding Sockets}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding Cores}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding LogicalProcessors}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding Virtualization}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding L1Cache}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding L2Cache}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding L3Cache}" Foreground="White" TextAlignment="Right"/>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="{Binding BaseSpeed}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Sockets}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Cores}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding LogicalProcessors}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Virtualization}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding L1Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding L2Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding L3Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Grid>
                         </Grid>
@@ -439,19 +439,19 @@
                                 </Grid>
                             </StackPanel>
 
-                            <Grid Grid.Column="1" ColumnDefinitions="*, Auto">
-                                <StackPanel Grid.Column="0" Spacing="4">
+                            <Grid Grid.Column="1" ColumnDefinitions="Auto, *">
+                                <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,12,0">
                                     <TextBlock Text="Driver version:" Foreground="#888888"/>
                                     <TextBlock Text="Driver date:" Foreground="#888888"/>
                                     <TextBlock Text="DirectX version:" Foreground="#888888"/>
                                     <TextBlock Text="Hardware location:" Foreground="#888888"/>
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
-                                    <TextBlock Text="{Binding DriverVersion}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding DriverDate}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding DirectXVersion}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding PhysicalLocation}" Foreground="White" TextAlignment="Right"/>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="{Binding DriverVersion}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding DriverDate}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding DirectXVersion}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding PhysicalLocation}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Grid>
                         </Grid>
