@@ -47,6 +47,25 @@ public partial class WifiViewModel : ViewModelBase
 
     public string AdapterNameLabel { get; } = "Wi-Fi";
 
+    [ObservableProperty] private string? _wifiStandard;
+    [ObservableProperty] private string? _signalPercent;
+    [ObservableProperty] private string? _bssid;
+    [ObservableProperty] private string? _dhcpServer;
+    [ObservableProperty] private string? _gateway;
+    [ObservableProperty] private string? _dns1;
+    [ObservableProperty] private string? _dns2;
+    [ObservableProperty] private string? _netmask;
+    [ObservableProperty] private string? _nonMobileTraffic;
+    [ObservableProperty] private string? _mobileTraffic;
+    [ObservableProperty] private string? _downloadedSinceBoot;
+    [ObservableProperty] private string? _uploadedSinceBoot;
+
+    private void ClearExtras()
+    {
+        WifiStandard = SignalPercent = Bssid = DhcpServer = Gateway = Dns1 = Dns2 = Netmask = null;
+        NonMobileTraffic = MobileTraffic = DownloadedSinceBoot = UploadedSinceBoot = null;
+    }
+
     private readonly IWifiProvider _provider;
 
     public WifiViewModel() : this(ProviderFactory.CreateWifi()) { }
@@ -111,6 +130,7 @@ public partial class WifiViewModel : ViewModelBase
                         if (!connected)
                         {
                             ResetToDisconnectedState(snap.AdapterName);
+                            ClearExtras();
                             return;
                         }
 
@@ -121,6 +141,19 @@ public partial class WifiViewModel : ViewModelBase
                         SignalStrength = snap.SignalStrength;
                         Ipv4Address = snap.Ipv4Address;
                         Ipv6Address = snap.Ipv6Address;
+
+                        WifiStandard = snap.WifiStandard;
+                        SignalPercent = snap.SignalPercentText;
+                        Bssid = snap.Bssid;
+                        DhcpServer = snap.DhcpServer;
+                        Gateway = snap.Gateway;
+                        Dns1 = snap.Dns1;
+                        Dns2 = snap.Dns2;
+                        Netmask = snap.Netmask;
+                        NonMobileTraffic = snap.NonMobileTrafficText;
+                        MobileTraffic = snap.MobileTrafficText;
+                        DownloadedSinceBoot = snap.DownloadText;
+                        UploadedSinceBoot = snap.UploadText;
 
                         if (sendKbps.HasValue) SendValue = sendKbps.Value;
                         if (receiveKbps.HasValue) ReceiveValue = receiveKbps.Value;

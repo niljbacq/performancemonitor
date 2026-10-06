@@ -17,11 +17,6 @@ public sealed class CpuSpecs
     public string? L1Cache { get; set; }
     public string? L2Cache { get; set; }
     public string? L3Cache { get; set; }
-    public string? FrequencyMinText { get; set; }
-    public string? FrequencyMaxText { get; set; }
-    public string? CpuGovernor { get; set; }
-    public string? SupportedAbis { get; set; }
-    public string? ClusterText { get; set; }
 }
 
 public sealed record ProcessStats(int Processes, int Threads, string Handles);
@@ -33,7 +28,6 @@ public sealed class GpuSpecs
     public string? DriverDate { get; set; }
     public string? GraphicsApi { get; set; }
     public string? PhysicalLocation { get; set; }
-    public string? Vendor { get; set; }
 }
 
 public sealed class GpuSample
@@ -54,10 +48,6 @@ public sealed class DiskSpecs
     public string? SystemDisk { get; set; }
     public string? PageFile { get; set; }
     public string? Type { get; set; }
-    public string? UsedText { get; set; }
-    public string? FreeText { get; set; }
-    public string? AppsAndDataText { get; set; }
-    public string? SystemReservedText { get; set; }
 }
 
 public sealed class DiskSample
@@ -72,13 +62,7 @@ public sealed class DiskSample
 
 public sealed record WifiDetails(string Status, string Ssid, string ConnectionType, string SignalStrength);
 
-public sealed record MemoryUsage(double TotalGB, double UsedGB, double Percent)
-{
-    public string? SwapText { get; init; }
-    public string? ActiveText { get; init; }
-    public string? InactiveText { get; init; }
-    public string? SlabText { get; init; }
-}
+public sealed record MemoryUsage(double TotalGB, double UsedGB, double Percent);
 
 // ---- Interfaces ----
 
@@ -92,8 +76,6 @@ public interface ICpuProvider
     long UptimeMilliseconds => Environment.TickCount64;
     string? UsageUnavailableMessage => null;
     string? ProcessStatsUnavailableMessage => null;
-
-    string? PerCoreFrequencyText => null;
 }
 
 public interface IGpuProvider
@@ -118,21 +100,7 @@ public interface IWifiProvider
 
 public sealed record WifiSnapshot(
     string AdapterName, string Status, string Ssid, string ConnectionType, string SignalStrength,
-    string Ipv4Address, string Ipv6Address, long? BytesSent, long? BytesReceived)
-{
-    public string? WifiStandard { get; init; }
-    public string? SignalPercentText { get; init; }
-    public string? Bssid { get; init; }
-    public string? DhcpServer { get; init; }
-    public string? Gateway { get; init; }
-    public string? Dns1 { get; init; }
-    public string? Dns2 { get; init; }
-    public string? Netmask { get; init; }
-    public string? NonMobileTrafficText { get; init; }
-    public string? MobileTrafficText { get; init; }
-    public string? DownloadText { get; init; }
-    public string? UploadText { get; init; }
-}
+    string Ipv4Address, string Ipv6Address, long? BytesSent, long? BytesReceived);
 
 public interface IMemoryProvider
 {

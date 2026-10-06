@@ -601,6 +601,12 @@
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Sockets"/><TextBlock Classes="mValue" Text="{Binding Sockets}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Virtualization"/><TextBlock Classes="mValue" Text="{Binding Virtualization}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Uptime"/><TextBlock Classes="mValue" Text="{Binding Uptime}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding FrequencyMinText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Min frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMinText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding FrequencyMaxText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Max frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMaxText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding CpuGovernor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Governor"/><TextBlock Classes="mValue" Text="{Binding CpuGovernor}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding SupportedAbis, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Supported ABIs"/><TextBlock Classes="mValue" Text="{Binding SupportedAbis}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Clusters"/><TextBlock Classes="mValue" Text="{Binding ClusterText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding PerCoreFrequencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Per-core now"/><TextBlock Classes="mValue" Text="{Binding PerCoreFrequencyText}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                             <Border Classes="mCard">
@@ -633,6 +639,10 @@
                                 <StackPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding UsedMemoryText}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Total"/><TextBlock Classes="mValue" Text="{Binding TotalMemoryText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding SwapText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Swap / ZRAM"/><TextBlock Classes="mValue" Text="{Binding SwapText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding ActiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Active"/><TextBlock Classes="mValue" Text="{Binding ActiveText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding InactiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Inactive"/><TextBlock Classes="mValue" Text="{Binding InactiveText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding SlabText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Slab (kernel)"/><TextBlock Classes="mValue" Text="{Binding SlabText}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -667,6 +677,10 @@
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Type"/><TextBlock Classes="mValue" Text="{Binding Type}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="System disk"/><TextBlock Classes="mValue" Text="{Binding SystemDisk}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding PageFile}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding UsedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding UsedText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding FreeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding FreeText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding AppsAndDataText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Apps &amp; data"/><TextBlock Classes="mValue" Text="{Binding AppsAndDataText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding SystemReservedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="System &amp; reserved"/><TextBlock Classes="mValue" Text="{Binding SystemReservedText}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -694,6 +708,18 @@
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Connection"/><TextBlock Classes="mValue" Text="{Binding ConnectionType}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="IPv4"/><TextBlock Classes="mValue" Text="{Binding Ipv4Address}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="IPv6"/><TextBlock Classes="mValue" Text="{Binding Ipv6Address}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding WifiStandard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Wi-Fi standard"/><TextBlock Classes="mValue" Text="{Binding WifiStandard}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding SignalPercent, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Signal %"/><TextBlock Classes="mValue" Text="{Binding SignalPercent}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding Bssid, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="BSSID"/><TextBlock Classes="mValue" Text="{Binding Bssid}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding DhcpServer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DHCP server"/><TextBlock Classes="mValue" Text="{Binding DhcpServer}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding Gateway, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Gateway"/><TextBlock Classes="mValue" Text="{Binding Gateway}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding Dns1, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DNS 1"/><TextBlock Classes="mValue" Text="{Binding Dns1}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding Dns2, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DNS 2"/><TextBlock Classes="mValue" Text="{Binding Dns2}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding Netmask, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Netmask"/><TextBlock Classes="mValue" Text="{Binding Netmask}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding NonMobileTraffic, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Non-mobile traffic"/><TextBlock Classes="mValue" Text="{Binding NonMobileTraffic}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding MobileTraffic, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Mobile traffic"/><TextBlock Classes="mValue" Text="{Binding MobileTraffic}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding DownloadedSinceBoot, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Downloaded since boot"/><TextBlock Classes="mValue" Text="{Binding DownloadedSinceBoot}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding UploadedSinceBoot, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Uploaded since boot"/><TextBlock Classes="mValue" Text="{Binding UploadedSinceBoot}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -722,6 +748,7 @@
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver date"/><TextBlock Classes="mValue" Text="{Binding DriverDate}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Graphics API"/><TextBlock Classes="mValue" Text="{Binding DirectXVersion}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Location"/><TextBlock Classes="mValue" Text="{Binding PhysicalLocation}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding GpuVendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Vendor"/><TextBlock Classes="mValue" Text="{Binding GpuVendor}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

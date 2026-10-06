@@ -57,6 +57,13 @@ public partial class CpuViewModel : ViewModelBase
     private string _l3Cache = "N/A";
     public string L3Cache { get => _l3Cache; set => SetProperty(ref _l3Cache, value); }
 
+    [ObservableProperty] private string? _frequencyMinText;
+    [ObservableProperty] private string? _frequencyMaxText;
+    [ObservableProperty] private string? _cpuGovernor;
+    [ObservableProperty] private string? _supportedAbis;
+    [ObservableProperty] private string? _clusterText;
+    [ObservableProperty] private string? _perCoreFrequencyText;
+
     private readonly ICpuProvider _provider;
 
     public CpuViewModel() : this(ProviderFactory.CreateCpu()) { }
@@ -82,6 +89,12 @@ public partial class CpuViewModel : ViewModelBase
         if (s.L1Cache != null) L1Cache = s.L1Cache;
         if (s.L2Cache != null) L2Cache = s.L2Cache;
         if (s.L3Cache != null) L3Cache = s.L3Cache;
+
+        FrequencyMinText = s.FrequencyMinText;
+        FrequencyMaxText = s.FrequencyMaxText;
+        CpuGovernor = s.CpuGovernor;
+        SupportedAbis = s.SupportedAbis;
+        ClusterText = s.ClusterText;
     }
 
     private async Task StartMonitoringAsync()
@@ -105,11 +118,15 @@ public partial class CpuViewModel : ViewModelBase
                 string? statsNote = _provider.ProcessStatsUnavailableMessage;
                 ProcessStats? stats = statsDue && statsNote == null ? _provider.GetProcessStats() : null;
 
+                string? perCoreText = _provider.PerCoreFrequencyText;
+
                 Dispatcher.UIThread.Post(() =>
                 {
                     UtilizationValue = usageNote == null ? cpuPercent : 0;
                     Utilization = usageNote ?? $"{cpuPercent}%";
                     Uptime = uptimeText;
+
+                    if (perCoreText != null) PerCoreFrequencyText = perCoreText;
 
                     if (stats != null)
                     {

@@ -1,4 +1,5 @@
 ﻿using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,6 +22,11 @@ public partial class MemoryViewModel : ViewModelBase
 
     private double _memoryUsagePercentValue = 0;
     public double MemoryUsagePercentValue { get => _memoryUsagePercentValue; set => SetProperty(ref _memoryUsagePercentValue, value); }
+
+    [ObservableProperty] private string? _swapText;
+    [ObservableProperty] private string? _activeText;
+    [ObservableProperty] private string? _inactiveText;
+    [ObservableProperty] private string? _slabText;
 
     public MemoryViewModel() : this(ProviderFactory.CreateMemory()) { }
 
@@ -46,6 +52,11 @@ public partial class MemoryViewModel : ViewModelBase
                     TotalMemoryText = $"{m.TotalGB} GB";
                     MemoryUsagePercent = $"{m.Percent}%";
                     MemoryUsagePercentValue = m.Percent;
+
+                    SwapText = m.SwapText;
+                    ActiveText = m.ActiveText;
+                    InactiveText = m.InactiveText;
+                    SlabText = m.SlabText;
                 });
             }
             catch { }

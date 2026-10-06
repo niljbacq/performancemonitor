@@ -39,6 +39,8 @@ public partial class GpuViewModel : ViewModelBase
     private string _sharedMemoryUsage = "N/A";
     public string SharedMemoryUsage { get => _sharedMemoryUsage; set => SetProperty(ref _sharedMemoryUsage, value); }
 
+    [ObservableProperty] private string? _gpuVendor;
+
     private readonly IGpuProvider _provider;
 
     public GpuViewModel() : this(ProviderFactory.CreateGpu()) { }
@@ -59,6 +61,8 @@ public partial class GpuViewModel : ViewModelBase
         if (s.DriverDate != null) DriverDate = s.DriverDate;
         if (s.GraphicsApi != null) DirectXVersion = s.GraphicsApi;
         if (s.PhysicalLocation != null) PhysicalLocation = s.PhysicalLocation;
+
+        GpuVendor = s.Vendor;
     }
 
     private async Task StartMonitoringAsync()

@@ -45,6 +45,11 @@ public partial class DiskViewModel : ViewModelBase
     private string _type = "Unknown";
     public string Type { get => _type; set => SetProperty(ref _type, value); }
 
+    [ObservableProperty] private string? _usedText;
+    [ObservableProperty] private string? _freeText;
+    [ObservableProperty] private string? _appsAndDataText;
+    [ObservableProperty] private string? _systemReservedText;
+
     private readonly IDiskProvider _provider;
 
     public DiskViewModel() : this(ProviderFactory.CreateDisk()) { }
@@ -67,6 +72,11 @@ public partial class DiskViewModel : ViewModelBase
         if (s.SystemDisk != null) SystemDisk = s.SystemDisk;
         if (s.PageFile != null) PageFile = s.PageFile;
         if (s.Type != null) Type = s.Type;
+
+        UsedText = s.UsedText;
+        FreeText = s.FreeText;
+        AppsAndDataText = s.AppsAndDataText;
+        SystemReservedText = s.SystemReservedText;
     }
 
     private async Task StartMonitoringAsync()
