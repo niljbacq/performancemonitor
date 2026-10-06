@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace TaskManager.Providers;
@@ -106,6 +107,34 @@ public interface IDiskProvider
 {
     DiskSpecs GetSpecs();
     DiskSample? Sample();
+}
+
+public interface IDiskListProvider
+{
+    IReadOnlyList<DiskInfo> GetDiskList();
+    IReadOnlyList<DiskInfo> SampleDiskList();
+}
+
+public sealed class DiskInfo
+{
+    public string? DeviceId { get; set; }
+    public string? DiskName { get; set; }
+    public string? ModelName { get; set; }
+    public string? Type { get; set; }                 // "SSD", "HDD", "NVMe SSD", "Unknown"
+    public string? Capacity { get; set; }
+    public string? Formatted { get; set; }
+    public string? SystemDisk { get; set; }
+    public string? PageFile { get; set; }
+    public string? UsedText { get; set; }
+    public string? FreeText { get; set; }
+    public string? AppsAndDataText { get; set; }
+    public string? SystemReservedText { get; set; }
+    public double? ReadBytesPerSec { get; set; }
+    public double? WriteBytesPerSec { get; set; }
+    public double? ActivePercent { get; set; }
+    public double? ResponseMs { get; set; }
+    public bool NotSupported { get; set; }
+    public string? NotSupportedMessage { get; set; }
 }
 
 public interface IWifiProvider

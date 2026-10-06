@@ -261,70 +261,134 @@
                 </DataTemplate>
 
                 <!-- Disk View Template -->
+                                <!-- Disk View Template (SSD / HDD split) -->
                 <DataTemplate DataType="{x:Type vm:DiskViewModel}">
-                    <Grid RowDefinitions="Auto, Auto, Auto, Auto, *" Margin="20">
-                        <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,10">
-                            <TextBlock Text="{Binding DiskName}" FontSize="32" FontWeight="Bold" Foreground="White"/>
-                            <TextBlock Grid.Column="1" Text="{Binding ModelName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center"/>
+                    <Grid RowDefinitions="Auto, *" Margin="20">
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
+                            <TextBlock Grid.Column="0" Text="Disk" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ModelName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         </Grid>
 
-                        <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,0,0,5">
-                            <TextBlock Text="Active time" FontSize="12" Foreground="#888888"/>
-                            <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
-                        </Grid>
+                        <Grid Grid.Row="1" ColumnDefinitions="*, *">
 
-                        <Border Grid.Row="2" Height="100" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Margin="0,0,0,15" Padding="10">
-                            <Grid RowDefinitions="*, Auto">
-                                <ProgressBar Value="{Binding ActiveTimeValue}" Minimum="0" Maximum="100" Height="16" Foreground="#82C91E" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
-                                <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,5,0,0">
-                                    <TextBlock Text="60 seconds" FontSize="11" Foreground="#666666"/>
-                                    <TextBlock Grid.Column="1" Text="0" FontSize="11" Foreground="#666666"/>
-                                </Grid>
-                            </Grid>
-                        </Border>
+                            <!-- SSD column -->
+                            <Border Grid.Column="0" Background="#252526" CornerRadius="6" Padding="16" Margin="0,0,8,0">
+                                <ScrollViewer>
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="SSD" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
 
-                        <Grid Grid.Row="3" ColumnDefinitions="2*, 3*" Margin="0,0,0,10">
-                            <StackPanel Grid.Column="0" Spacing="15">
-                                <Grid ColumnDefinitions="*, *">
-                                    <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{Binding Ssd.ModelName}" FontSize="14" Foreground="#E1E1E1" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding Ssd.HasDisk}"/>
+                                    <TextBlock Text="{Binding Ssd.EmptyLabel}" FontSize="14" Foreground="#888888"
+                                               IsVisible="{Binding !Ssd.HasDisk}"/>
+
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Ssd.HasDisk}">
                                         <TextBlock Text="Active time" FontSize="12" Foreground="#888888"/>
-                                        <TextBlock Text="{Binding ActiveTime}" FontSize="26" FontWeight="SemiBold" Foreground="White"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="Average response time" FontSize="12" Foreground="#888888"/>
-                                        <TextBlock Text="{Binding AverageResponseTime}" FontSize="26" FontWeight="SemiBold" Foreground="White"/>
-                                    </StackPanel>
-                                </Grid>
+                                        <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
+                                    </Grid>
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Ssd.HasDisk}">
+                                        <Grid RowDefinitions="*, Auto">
+                                            <ProgressBar Value="{Binding Ssd.ActiveTimeValue}" Minimum="0" Maximum="100" Height="16" Foreground="#82C91E" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
+                                            <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,5,0,0">
+                                                <TextBlock Text="60 seconds" FontSize="11" Foreground="#666666"/>
+                                                <TextBlock Grid.Column="1" Text="0" FontSize="11" Foreground="#666666"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
 
-                                <Grid ColumnDefinitions="*, *">
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Read speed" FontSize="12" Foreground="#888888"/>
-                                        <TextBlock Text="{Binding ReadSpeed}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="Write speed" FontSize="12" Foreground="#888888"/>
-                                        <TextBlock Text="{Binding WriteSpeed}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
-                                    </StackPanel>
-                                </Grid>
-                            </StackPanel>
+                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Ssd.HasDisk}">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Read speed" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Ssd.ReadSpeed}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="Write speed" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Ssd.WriteSpeed}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
 
-                            <Grid Grid.Column="1" ColumnDefinitions="Auto, *" Margin="30,0,0,0">
-                                <StackPanel Grid.Column="0" Spacing="4">
-                                    <TextBlock Text="Capacity:" Foreground="#888888"/>
-                                    <TextBlock Text="Formatted:" Foreground="#888888"/>
-                                    <TextBlock Text="System disk:" Foreground="#888888"/>
-                                    <TextBlock Text="Page file:" Foreground="#888888"/>
-                                    <TextBlock Text="Type:" Foreground="#888888"/>
+                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Ssd.HasDisk}">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Avg response" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Ssd.AverageResponseTime}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="Capacity" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Ssd.Capacity}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <StackPanel Spacing="4" IsVisible="{Binding Ssd.HasDisk}">
+                                        <DockPanel><TextBlock Text="Disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.DiskName}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Formatted" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.Formatted}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="System disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.SystemDisk}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Page file" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.PageFile}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Used" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.UsedText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Free" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.FreeText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
+                                </ScrollViewer>
+                            </Border>
 
-                                <StackPanel Grid.Column="1" Margin="20,0,0,0" Spacing="4" HorizontalAlignment="Right">
-                                    <TextBlock Text="{Binding Capacity}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding Formatted}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding SystemDisk}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding PageFile}" Foreground="White" TextAlignment="Right"/>
-                                    <TextBlock Text="{Binding Type}" Foreground="White" TextAlignment="Right"/>
+                            <!-- HDD column -->
+                            <Border Grid.Column="1" Background="#252526" CornerRadius="6" Padding="16" Margin="8,0,0,0">
+                                <ScrollViewer>
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="HDD" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+
+                                    <TextBlock Text="{Binding Hdd.ModelName}" FontSize="14" Foreground="#E1E1E1" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding Hdd.HasDisk}"/>
+                                    <TextBlock Text="{Binding Hdd.EmptyLabel}" FontSize="14" Foreground="#888888"
+                                               IsVisible="{Binding !Hdd.HasDisk}"/>
+
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Hdd.HasDisk}">
+                                        <TextBlock Text="Active time" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
+                                    </Grid>
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Hdd.HasDisk}">
+                                        <Grid RowDefinitions="*, Auto">
+                                            <ProgressBar Value="{Binding Hdd.ActiveTimeValue}" Minimum="0" Maximum="100" Height="16" Foreground="#82C91E" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
+                                            <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,5,0,0">
+                                                <TextBlock Text="60 seconds" FontSize="11" Foreground="#666666"/>
+                                                <TextBlock Grid.Column="1" Text="0" FontSize="11" Foreground="#666666"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+
+                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Hdd.HasDisk}">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Read speed" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Hdd.ReadSpeed}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="Write speed" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Hdd.WriteSpeed}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Hdd.HasDisk}">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Avg response" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Hdd.AverageResponseTime}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="Capacity" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Hdd.Capacity}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <StackPanel Spacing="4" IsVisible="{Binding Hdd.HasDisk}">
+                                        <DockPanel><TextBlock Text="Disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.DiskName}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Formatted" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.Formatted}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="System disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.SystemDisk}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Page file" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.PageFile}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Used" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.UsedText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Free" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.FreeText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
-                            </Grid>
+                                </ScrollViewer>
+                            </Border>
+
                         </Grid>
                     </Grid>
                 </DataTemplate>
@@ -650,37 +714,59 @@
                 </DataTemplate>
 
                 <!-- DISK -->
+                                <!-- DISK (mobile — stacked SSD/HDD) -->
                 <DataTemplate DataType="{x:Type vm:DiskViewModel}" x:DataType="vm:DiskViewModel">
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
                             <TextBlock Classes="mTitle" Text="Disk"/>
-                            <TextBlock Classes="mSub" Text="{Binding ModelName}"/>
+
                             <Border Classes="mCard">
-                                <StackPanel Spacing="6">
-                                    <TextBlock Classes="mLabel" Margin="0" Text="Active time"/>
-                                    <TextBlock Classes="mBig" Text="{Binding ActiveTime}"/>
-                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding ActiveTimeValue}"/>
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="mCardTitle" Text="SSD"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Ssd.ModelName}" IsVisible="{Binding Ssd.HasDisk}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Ssd.EmptyLabel}" IsVisible="{Binding !Ssd.HasDisk}"/>
+
+                                    <StackPanel Spacing="6" IsVisible="{Binding Ssd.HasDisk}">
+                                        <TextBlock Classes="mLabel" Margin="0" Text="Active time"/>
+                                        <TextBlock Classes="mBig" Text="{Binding Ssd.ActiveTime}"/>
+                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding Ssd.ActiveTimeValue}"/>
+
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Read speed"/><TextBlock Classes="mValue" Text="{Binding Ssd.ReadSpeed}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Write speed"/><TextBlock Classes="mValue" Text="{Binding Ssd.WriteSpeed}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Avg. response"/><TextBlock Classes="mValue" Text="{Binding Ssd.AverageResponseTime}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Disk"/><TextBlock Classes="mValue" Text="{Binding Ssd.DiskName}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Capacity"/><TextBlock Classes="mValue" Text="{Binding Ssd.Capacity}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Formatted"/><TextBlock Classes="mValue" Text="{Binding Ssd.Formatted}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="System disk"/><TextBlock Classes="mValue" Text="{Binding Ssd.SystemDisk}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding Ssd.PageFile}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding Ssd.UsedText}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding Ssd.FreeText}"/></DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
+
                             <Border Classes="mCard">
-                                <StackPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Read speed"/><TextBlock Classes="mValue" Text="{Binding ReadSpeed}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Write speed"/><TextBlock Classes="mValue" Text="{Binding WriteSpeed}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Avg. response"/><TextBlock Classes="mValue" Text="{Binding AverageResponseTime}"/></DockPanel>
-                                </StackPanel>
-                            </Border>
-                            <Border Classes="mCard">
-                                <StackPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Disk"/><TextBlock Classes="mValue" Text="{Binding DiskName}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Capacity"/><TextBlock Classes="mValue" Text="{Binding Capacity}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Formatted"/><TextBlock Classes="mValue" Text="{Binding Formatted}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Type"/><TextBlock Classes="mValue" Text="{Binding Type}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="System disk"/><TextBlock Classes="mValue" Text="{Binding SystemDisk}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding PageFile}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding UsedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding UsedText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding FreeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding FreeText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding AppsAndDataText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Apps &amp; data"/><TextBlock Classes="mValue" Text="{Binding AppsAndDataText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding SystemReservedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="System &amp; reserved"/><TextBlock Classes="mValue" Text="{Binding SystemReservedText}"/></DockPanel>
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="mCardTitle" Text="HDD"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Hdd.ModelName}" IsVisible="{Binding Hdd.HasDisk}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Hdd.EmptyLabel}" IsVisible="{Binding !Hdd.HasDisk}"/>
+
+                                    <StackPanel Spacing="6" IsVisible="{Binding Hdd.HasDisk}">
+                                        <TextBlock Classes="mLabel" Margin="0" Text="Active time"/>
+                                        <TextBlock Classes="mBig" Text="{Binding Hdd.ActiveTime}"/>
+                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding Hdd.ActiveTimeValue}"/>
+
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Read speed"/><TextBlock Classes="mValue" Text="{Binding Hdd.ReadSpeed}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Write speed"/><TextBlock Classes="mValue" Text="{Binding Hdd.WriteSpeed}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Avg. response"/><TextBlock Classes="mValue" Text="{Binding Hdd.AverageResponseTime}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Disk"/><TextBlock Classes="mValue" Text="{Binding Hdd.DiskName}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Capacity"/><TextBlock Classes="mValue" Text="{Binding Hdd.Capacity}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Formatted"/><TextBlock Classes="mValue" Text="{Binding Hdd.Formatted}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="System disk"/><TextBlock Classes="mValue" Text="{Binding Hdd.SystemDisk}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding Hdd.PageFile}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding Hdd.UsedText}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding Hdd.FreeText}"/></DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
