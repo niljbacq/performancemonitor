@@ -457,67 +457,118 @@
 
                 <!-- GPU View Template -->
                 <DataTemplate DataType="{x:Type vm:GpuViewModel}">
-                    <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="20">
-                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,10">
-                            <TextBlock Text="GPU" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
+                    <Grid RowDefinitions="Auto, *" Margin="20">
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
+                            <TextBlock Grid.Column="0" Text="GPU" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
                             <TextBlock Grid.Column="1" Text="{Binding GpuName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         </Grid>
 
-                        <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,0,0,5">
-                            <TextBlock Text="3D Utilization" FontSize="12" Foreground="#888888"/>
-                            <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
-                        </Grid>
+                        <Grid Grid.Row="1" ColumnDefinitions="*, *">
 
-                        <Border Grid.Row="2" Height="150" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Margin="0,0,0,15" Padding="10">
-                            <Grid RowDefinitions="*, Auto">
-                                <ProgressBar Value="{Binding UtilizationValue}" Minimum="0" Maximum="100" Height="20" Foreground="#00A8FF" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
-                                <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,10,0,0">
-                                    <TextBlock Text="60 seconds" FontSize="11" Foreground="#666666"/>
-                                    <TextBlock Grid.Column="1" Text="0" FontSize="11" Foreground="#666666"/>
-                                </Grid>
-                            </Grid>
-                        </Border>
+                            <!-- Integrated column -->
+                            <Border Grid.Column="0" Background="#252526" CornerRadius="6" Padding="16" Margin="0,0,8,0">
+                                <ScrollViewer>
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Integrated" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
 
-                        <Grid Grid.Row="3" ColumnDefinitions="3*, 2*">
-                            <StackPanel Grid.Column="0" Spacing="15" Margin="0,0,20,0">
-                                <Grid ColumnDefinitions="*, *">
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Utilization" FontSize="12" Foreground="#888888"/>
-                                        <TextBlock Text="{Binding Utilization}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="GPU Temperature" FontSize="12" Foreground="#888888"/>
-                                        <TextBlock Text="{Binding Temperature}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
-                                    </StackPanel>
-                                </Grid>
+                                    <TextBlock Text="{Binding Integrated.GpuName}" FontSize="14" Foreground="#E1E1E1" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding Integrated.HasGpu}"/>
+                                    <TextBlock Text="{Binding Integrated.EmptyLabel}" FontSize="14" Foreground="#888888"
+                                               IsVisible="{Binding !Integrated.HasGpu}"/>
 
-                                <Grid ColumnDefinitions="*, *">
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="GPU Memory" FontSize="12" Foreground="#888888"/>
-                                        <TextBlock Text="{Binding MemoryUsage}" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="Shared Memory" FontSize="12" Foreground="#888888"/>
-                                        <TextBlock Text="{Binding SharedMemoryUsage}" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
-                                    </StackPanel>
-                                </Grid>
-                            </StackPanel>
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Integrated.HasGpu}">
+                                        <TextBlock Text="3D Utilization" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
+                                    </Grid>
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Integrated.HasGpu}">
+                                        <ProgressBar Value="{Binding Integrated.UtilizationValue}" Minimum="0" Maximum="100" Height="16" Foreground="#00A8FF" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
+                                    </Border>
 
-                            <Grid Grid.Column="1" ColumnDefinitions="Auto, *">
-                                <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,12,0">
-                                    <TextBlock Text="Driver version:" Foreground="#888888"/>
-                                    <TextBlock Text="Driver date:" Foreground="#888888"/>
-                                    <TextBlock Text="DirectX version:" Foreground="#888888"/>
-                                    <TextBlock Text="Hardware location:" Foreground="#888888"/>
+                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Integrated.HasGpu}">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Utilization" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Integrated.Utilization}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="GPU Temperature" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Integrated.Temperature}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Integrated.HasGpu}">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="GPU Memory" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Integrated.MemoryUsage}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="Shared Memory" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Integrated.SharedMemoryUsage}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <StackPanel Spacing="4" IsVisible="{Binding Integrated.HasGpu}">
+                                        <DockPanel><TextBlock Text="Driver version" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.DriverVersion}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Driver date" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.DriverDate}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Graphics API" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.GraphicsApi}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Hardware location" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.PhysicalLocation}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Integrated.Vendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Vendor" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.Vendor}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
+                                </ScrollViewer>
+                            </Border>
 
-                                <StackPanel Grid.Column="1" Spacing="4">
-                                    <TextBlock Text="{Binding DriverVersion}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding DriverDate}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding DirectXVersion}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding PhysicalLocation}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                            <!-- Dedicated column -->
+                            <Border Grid.Column="1" Background="#252526" CornerRadius="6" Padding="16" Margin="8,0,0,0">
+                                <ScrollViewer>
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Dedicated" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+
+                                    <TextBlock Text="{Binding Dedicated.GpuName}" FontSize="14" Foreground="#E1E1E1" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding Dedicated.HasGpu}"/>
+                                    <TextBlock Text="{Binding Dedicated.EmptyLabel}" FontSize="14" Foreground="#888888"
+                                               IsVisible="{Binding !Dedicated.HasGpu}"/>
+
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Dedicated.HasGpu}">
+                                        <TextBlock Text="3D Utilization" FontSize="12" Foreground="#888888"/>
+                                        <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
+                                    </Grid>
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Dedicated.HasGpu}">
+                                        <ProgressBar Value="{Binding Dedicated.UtilizationValue}" Minimum="0" Maximum="100" Height="16" Foreground="#00A8FF" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
+                                    </Border>
+
+                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Dedicated.HasGpu}">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Utilization" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Dedicated.Utilization}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="GPU Temperature" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Dedicated.Temperature}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Dedicated.HasGpu}">
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="GPU Memory" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Dedicated.MemoryUsage}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="Shared Memory" FontSize="11" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Dedicated.SharedMemoryUsage}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <StackPanel Spacing="4" IsVisible="{Binding Dedicated.HasGpu}">
+                                        <DockPanel><TextBlock Text="Driver version" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.DriverVersion}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Driver date" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.DriverDate}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Graphics API" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.GraphicsApi}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel><TextBlock Text="Hardware location" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.PhysicalLocation}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Dedicated.Vendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Vendor" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.Vendor}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
-                            </Grid>
+                                </ScrollViewer>
+                            </Border>
+
                         </Grid>
                     </Grid>
                 </DataTemplate>
@@ -818,23 +869,48 @@
                         <StackPanel Margin="16" Spacing="12">
                             <TextBlock Classes="mTitle" Text="GPU"/>
                             <TextBlock Classes="mSub" Text="{Binding GpuName}"/>
+
+                            <!-- Integrated card -->
                             <Border Classes="mCard">
                                 <StackPanel Spacing="6">
-                                    <TextBlock Classes="mLabel" Margin="0" Text="Utilization"/>
-                                    <TextBlock Classes="mBig" Text="{Binding Utilization}"/>
-                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding UtilizationValue}"/>
+                                    <TextBlock Classes="mLabel" Margin="0" Text="Integrated" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Integrated.GpuName}" IsVisible="{Binding Integrated.HasGpu}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Integrated.EmptyLabel}" IsVisible="{Binding !Integrated.HasGpu}"/>
+                                    <StackPanel Spacing="6" IsVisible="{Binding Integrated.HasGpu}">
+                                        <TextBlock Classes="mLabel" Margin="0" Text="Utilization"/>
+                                        <TextBlock Classes="mBig" Text="{Binding Integrated.Utilization}"/>
+                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding Integrated.UtilizationValue}"/>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding Integrated.Temperature}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="GPU memory"/><TextBlock Classes="mValue" Text="{Binding Integrated.MemoryUsage}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Shared memory"/><TextBlock Classes="mValue" Text="{Binding Integrated.SharedMemoryUsage}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver version"/><TextBlock Classes="mValue" Text="{Binding Integrated.DriverVersion}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver date"/><TextBlock Classes="mValue" Text="{Binding Integrated.DriverDate}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Graphics API"/><TextBlock Classes="mValue" Text="{Binding Integrated.GraphicsApi}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Location"/><TextBlock Classes="mValue" Text="{Binding Integrated.PhysicalLocation}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Integrated.Vendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Vendor"/><TextBlock Classes="mValue" Text="{Binding Integrated.Vendor}"/></DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
+
+                            <!-- Dedicated card -->
                             <Border Classes="mCard">
-                                <StackPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding Temperature}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="GPU memory"/><TextBlock Classes="mValue" Text="{Binding MemoryUsage}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Shared memory"/><TextBlock Classes="mValue" Text="{Binding SharedMemoryUsage}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver version"/><TextBlock Classes="mValue" Text="{Binding DriverVersion}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver date"/><TextBlock Classes="mValue" Text="{Binding DriverDate}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Graphics API"/><TextBlock Classes="mValue" Text="{Binding DirectXVersion}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Location"/><TextBlock Classes="mValue" Text="{Binding PhysicalLocation}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding GpuVendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Vendor"/><TextBlock Classes="mValue" Text="{Binding GpuVendor}"/></DockPanel>
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="mLabel" Margin="0" Text="Dedicated" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Dedicated.GpuName}" IsVisible="{Binding Dedicated.HasGpu}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Dedicated.EmptyLabel}" IsVisible="{Binding !Dedicated.HasGpu}"/>
+                                    <StackPanel Spacing="6" IsVisible="{Binding Dedicated.HasGpu}">
+                                        <TextBlock Classes="mLabel" Margin="0" Text="Utilization"/>
+                                        <TextBlock Classes="mBig" Text="{Binding Dedicated.Utilization}"/>
+                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding Dedicated.UtilizationValue}"/>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding Dedicated.Temperature}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="GPU memory"/><TextBlock Classes="mValue" Text="{Binding Dedicated.MemoryUsage}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Shared memory"/><TextBlock Classes="mValue" Text="{Binding Dedicated.SharedMemoryUsage}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver version"/><TextBlock Classes="mValue" Text="{Binding Dedicated.DriverVersion}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver date"/><TextBlock Classes="mValue" Text="{Binding Dedicated.DriverDate}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Graphics API"/><TextBlock Classes="mValue" Text="{Binding Dedicated.GraphicsApi}"/></DockPanel>
+                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Location"/><TextBlock Classes="mValue" Text="{Binding Dedicated.PhysicalLocation}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.Vendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Vendor"/><TextBlock Classes="mValue" Text="{Binding Dedicated.Vendor}"/></DockPanel>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

@@ -337,29 +337,46 @@ public sealed class AndroidDiskProvider : IDiskProvider
     public DiskSample? Sample() => new DiskSample { NotSupported = true, NotSupportedMessage = Unavailable };
 }
 
-public sealed class AndroidGpuProvider : IGpuProvider
+public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
 {
     private const string Unavailable = "Not available on Android";
 
+    // GpuMap/GpuClassifier are internal to the Shared assembly, so Android
+    // (a separate assembly) keeps its own minimal mapping helpers here.
+
+    private static GpuSpecs ToSpecs(GpuInfo g) => new()
+    {
+        Name = g.Name,
+        DriverVersion = g.DriverVersion,
+        DriverDate = g.DriverDate,
+        GraphicsApi = g.GraphicsApi,
+        PhysicalLocation = g.PhysicalLocation,
+        Vendor = g.Vendor
+    };
+
+    private static GpuInfo Clone(GpuInfo src) => new()
+    {
+        DeviceId = src.DeviceId,
+        PciBus = src.PciBus,
+        Name = src.Name,
+        Kind = src.Kind,
+        DriverVersion = src.DriverVersion,
+        DriverDate = src.DriverDate,
+        GraphicsApi = src.GraphicsApi,
+        PhysicalLocation = src.PhysicalLocation,
+        Vendor = src.Vendor,
+        Utilization = src.Utilization,
+        TemperatureC = src.TemperatureC,
+        UtilizationText = src.UtilizationText,
+        TemperatureText = src.TemperatureText,
+        MemoryUsage = src.MemoryUsage,
+        SharedMemoryUsage = src.SharedMemoryUsage
+    };
+
     public GpuSpecs GetSpecs()
     {
-        // Runs on a background thread (GpuViewModel calls GetSpecs inside Task.Run), which is what EGL needs.
-        var gl = GpuInfoEgl.Read();
-
-        string soc = $"{Android.OS.Build.Hardware ?? "Unknown"} (SoC / board)";
-        string? model = gl?.Renderer
-                        ?? Fmt.ReadText("/sys/kernel/gpu/gpu_model")            // MediaTek, best effort
-                        ?? Fmt.ReadText("/sys/class/kgsl/kgsl-3d0/gpu_model");  // Qualcomm, best effort
-
-        return new GpuSpecs
-        {
-            Name = string.IsNullOrWhiteSpace(model) ? soc : model,
-            Vendor = gl?.Vendor ?? Fmt.NA,
-            GraphicsApi = gl?.Version ?? Unavailable,
-            DriverVersion = Unavailable,
-            DriverDate = Unavailable,
-            PhysicalLocation = Unavailable
-        };
+        var list = GetGpuList();
+        return list.Count == 0 ? new GpuSpecs() : ToSpecs(list[0]);
     }
 
     public GpuSample? Sample() => new()
@@ -368,6 +385,45 @@ public sealed class AndroidGpuProvider : IGpuProvider
         TemperatureText = Unavailable,
         MemoryUsage = Unavailable
     };
+
+    public IReadOnlyList<GpuInfo> GetGpuList()
+    {
+        // Runs on a background thread (GpuViewModel calls GetGpuList inside Task.Run), which is what EGL needs.
+        var gl = GpuInfoEgl.Read();
+
+        string soc = $"{Android.OS.Build.Hardware ?? "Unknown"} (SoC / board)";
+        string? model = gl?.Renderer
+                        ?? Fmt.ReadText("/sys/kernel/gpu/gpu_model")            // MediaTek, best effort
+                        ?? Fmt.ReadText("/sys/class/kgsl/kgsl-3d0/gpu_model");  // Qualcomm, best effort
+
+        return new List<GpuInfo>
+        {
+            new()
+            {
+                Name = string.IsNullOrWhiteSpace(model) ? soc : model,
+                Vendor = gl?.Vendor ?? Fmt.NA,
+                GraphicsApi = gl?.Version ?? Unavailable,
+                DriverVersion = Unavailable,
+                DriverDate = Unavailable,
+                PhysicalLocation = Unavailable,
+                Kind = "Integrated"   // Android exposes only the SoC's integrated GPU
+            }
+        };
+    }
+
+    public IReadOnlyList<GpuInfo> SampleGpuList()
+    {
+        var list = new List<GpuInfo>();
+        foreach (var g in GetGpuList())
+        {
+            var info = Clone(g);
+            info.UtilizationText = Unavailable;
+            info.TemperatureText = Unavailable;
+            info.MemoryUsage = Unavailable;
+            list.Add(info);
+        }
+        return list;
+    }
 }
 
 public sealed class AndroidWifiProvider : IWifiProvider

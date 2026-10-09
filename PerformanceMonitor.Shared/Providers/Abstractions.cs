@@ -103,6 +103,31 @@ public interface IGpuProvider
     GpuSample? Sample();
 }
 
+public interface IGpuListProvider
+{
+    IReadOnlyList<GpuInfo> GetGpuList();
+    IReadOnlyList<GpuInfo> SampleGpuList();
+}
+
+public sealed class GpuInfo
+{
+    public string? DeviceId { get; set; }
+    public string? PciBus { get; set; }
+    public string? Name { get; set; }
+    public string? Kind { get; set; }                 // "Integrated", "Dedicated", "Unknown"
+    public string? DriverVersion { get; set; }
+    public string? DriverDate { get; set; }
+    public string? GraphicsApi { get; set; }
+    public string? PhysicalLocation { get; set; }
+    public string? Vendor { get; set; }
+    public double? Utilization { get; set; }
+    public double? TemperatureC { get; set; }
+    public string? UtilizationText { get; set; }
+    public string? TemperatureText { get; set; }
+    public string? MemoryUsage { get; set; }
+    public string? SharedMemoryUsage { get; set; }
+}
+
 public interface IDiskProvider
 {
     DiskSpecs GetSpecs();
