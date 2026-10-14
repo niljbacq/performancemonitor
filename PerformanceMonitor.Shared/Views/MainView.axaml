@@ -470,6 +470,18 @@
                                     <TextBlock Text="{Binding SignalStrength}" Foreground="White"/>
                                 </StackPanel>
                             </Grid>
+
+                            <!-- Wi-Fi Snapshot Details (from GetSnapshot) -->
+                            <StackPanel Grid.Column="1" Margin="20,12,0,0" Spacing="4" IsVisible="{Binding WifiStandard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <DockPanel><TextBlock Text="Standard" Foreground="#888888"/><TextBlock Text="{Binding WifiStandard}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                <DockPanel IsVisible="{Binding SignalPercent, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Signal %" Foreground="#888888"/><TextBlock Text="{Binding SignalPercent}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                <DockPanel IsVisible="{Binding Bssid, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="BSSID" Foreground="#888888"/><TextBlock Text="{Binding Bssid}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                <DockPanel IsVisible="{Binding Gateway, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Gateway" Foreground="#888888"/><TextBlock Text="{Binding Gateway}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                <DockPanel IsVisible="{Binding DhcpServer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="DHCP" Foreground="#888888"/><TextBlock Text="{Binding DhcpServer}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                <DockPanel IsVisible="{Binding Dns1, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="DNS 1" Foreground="#888888"/><TextBlock Text="{Binding Dns1}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                <DockPanel IsVisible="{Binding Dns2, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="DNS 2" Foreground="#888888"/><TextBlock Text="{Binding Dns2}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                <DockPanel IsVisible="{Binding Netmask, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Netmask" Foreground="#888888"/><TextBlock Text="{Binding Netmask}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </DataTemplate>
@@ -735,6 +747,8 @@
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Sockets"/><TextBlock Classes="mValue" Text="{Binding Sockets}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Virtualization"/><TextBlock Classes="mValue" Text="{Binding Virtualization}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Uptime"/><TextBlock Classes="mValue" Text="{Binding Uptime}"/></DockPanel>
+<TextBlock Classes="mLabel" Margin="0,8,0,0" Text="Android details"
+           IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 <DockPanel Classes="mRow" IsVisible="{Binding FrequencyMinText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Min frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMinText}"/></DockPanel>
 <DockPanel Classes="mRow" IsVisible="{Binding FrequencyMaxText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Max frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMaxText}"/></DockPanel>
 <DockPanel Classes="mRow" IsVisible="{Binding CpuGovernor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Governor"/><TextBlock Classes="mValue" Text="{Binding CpuGovernor}"/></DockPanel>

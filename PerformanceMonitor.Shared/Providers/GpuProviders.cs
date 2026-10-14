@@ -526,9 +526,7 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
     // /proc/<pid>/fdinfo (drm-engine-<engine>=<ns>). Summing deltas across all
     // processes over the sample window and dividing by elapsed wall time gives a
     // real utilization figure without any direct device read. When no engine data
-    // exists at all (radeon and other legacy drivers), and the GPU is an integrated
-    // APU that shares silicon with the CPU, we fall back to a CPU-derived activity
-    // proxy computed from /proc/stat, explicitly labeled as a proxy.
+    // exists at all (radeon and other legacy drivers), we do not substitute CPU %.
     private void FillComputedUtilization(GpuInfo info)
     {
         string? pci = info.PciBus;
@@ -550,23 +548,46 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                     double util = Math.Clamp(busyMs / elapsedMs * 100.0, 0, 100);
                     info.Utilization = Math.Round(util, 1);
                 }
-                else if (info.Utilization == null && info.Kind == "Integrated")
+                else if (info.Utilization == null)
                 {
-                    // No engine counters on this driver: compute a CPU-derived proxy
-                    // for the integrated APU (shares silicon with the CPU) from the
-                    // same "total vs idle" math the CPU provider uses.
-                    double? cpuPct = CpuUtilizationPercent();
-                    if (cpuPct.HasValue)
+                    bool radeon = info.DriverVersion != null &&
+                        info.DriverVersion.StartsWith("radeon", StringComparison.OrdinalIgnoreCase);
+                    if (radeon)
                     {
-                        double p = Math.Round(cpuPct.Value, 1);
-                        info.Utilization = p;
-                        info.UtilizationText = $"{p}% (CPU proxy)";
+                        info.UtilizationText = RadeonUtilReason(info);
+                    }
+                    else if (info.Kind == "Integrated")
+                    {
+                        double? cpuPct = CpuUtilizationPercent();
+                        if (cpuPct.HasValue)
+                        {
+                            double p = Math.Round(cpuPct.Value, 1);
+                            info.Utilization = p;
+                            info.UtilizationText = $"{p}% (CPU proxy)";
+                        }
                     }
                 }
             }
         }
 
         _busyBaseline[key] = (now, busyNs);
+    }
+
+    private static string RadeonUtilReason(GpuInfo info)
+    {
+        const string dbg = "/sys/kernel/debug";
+        if (!Directory.Exists(dbg))
+            return "Requires debugfs mount for radeon utilization (sudo mount -t debugfs none /sys/kernel/debug)";
+        try
+        {
+            if (!Directory.EnumerateFileSystemEntries(dbg).Any())
+                return "Requires debugfs mount for radeon utilization (sudo mount -t debugfs none /sys/kernel/debug)";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return "debugfs is mounted but root-only; radeon_pm_info is not readable";
+        }
+        return "radeon_pm_info has no GPU load counter on this GPU";
     }
 
     // drm-engine-* totals in fdinfo are grouped under a "drm-pdev: <pci slot>" header
@@ -584,30 +605,33 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                 string pid = Path.GetFileName(procDir);
                 if (!int.TryParse(pid, out _)) continue;
 
-                string fdinfo = Path.Combine(procDir, "fdinfo");
-                if (!File.Exists(fdinfo)) continue;
+                string fdinfoDir = Path.Combine(procDir, "fdinfo");
+                if (!Directory.Exists(fdinfoDir)) continue;
 
                 try
                 {
-                    bool inBlock = false;
-                    foreach (string line in File.ReadAllLines(fdinfo))
+                    foreach (string fdFile in Directory.EnumerateFiles(fdinfoDir))
                     {
-                        int colon = line.IndexOf(':');
-                        if (colon <= 0) continue;
-                        string key = line[..colon].Trim();
-                        string value = line[(colon + 1)..].Trim();
-
-                        if (key == "drm-pdev")
+                        bool inBlock = false;
+                        foreach (string line in File.ReadLines(fdFile))
                         {
-                            inBlock = GpuPci.Normalize(value) == want;
-                            continue;
-                        }
+                            int colon = line.IndexOf(':');
+                            if (colon <= 0) continue;
+                            string key = line[..colon].Trim();
+                            string value = line[(colon + 1)..].Trim();
 
-                        if (inBlock && key.StartsWith("drm-engine-", StringComparison.Ordinal))
-                        {
-                            any = true;
-                            if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long ns))
-                                total += ns;
+                            if (key == "drm-pdev")
+                            {
+                                inBlock = GpuPci.Normalize(value) == want;
+                                continue;
+                            }
+
+                            if (inBlock && key.StartsWith("drm-engine-", StringComparison.Ordinal))
+                            {
+                                any = true;
+                                if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long ns))
+                                    total += ns;
+                            }
                         }
                     }
                 }
