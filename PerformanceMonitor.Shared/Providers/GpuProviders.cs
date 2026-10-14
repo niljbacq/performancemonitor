@@ -208,7 +208,9 @@ internal static class GpuClassifier
         {
             if (IsAmdDiscrete(n)) return "Dedicated";
             if (IsAmdIntegrated(n)) return "Integrated";
-            return "Unknown";
+            // Fallback names ("AMD GPU (0x130f)") carry no model info; when lspci
+            // could not be matched, assume an AMD iGPU (APU) classification.
+            return "Integrated";
         }
         if (Has(n, "Mali") || Has(n, "Adreno") || Has(n, "PowerVR") || Has(n, "Immortalis") || Has(n, "Xclipse"))
             return "Integrated";
@@ -474,6 +476,10 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
     private List<GpuInfo>? _cached;
     private readonly object _lock = new();
 
+    // Per-GPU accumulated engine-busy baselines for the computed-utilization path
+    // (deltas of /proc/<pid>/fdinfo drm-engine-* sums over the sample window).
+    private readonly Dictionary<string, (DateTime At, long BusyNs)> _busyBaseline = new();
+
     public GpuSpecs GetSpecs()
     {
         var primary = GpuMap.Primary(GetGpuList());
@@ -508,10 +514,148 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         {
             var info = GpuMap.Clone(spec);
             try { FillSysfsSample(info); } catch { }
+            try { FillComputedUtilization(info); } catch { }
             result.Add(info);
         }
         NvidiaSmi.Apply(result, rows, includeLive: true);
         return result;
+    }
+
+    // Computed GPU utilization (the "we have the total, we compute the %" path):
+    // modern amdgpu/i915 drivers publish per-process engine-busy time in
+    // /proc/<pid>/fdinfo (drm-engine-<engine>=<ns>). Summing deltas across all
+    // processes over the sample window and dividing by elapsed wall time gives a
+    // real utilization figure without any direct device read. When no engine data
+    // exists at all (radeon and other legacy drivers), and the GPU is an integrated
+    // APU that shares silicon with the CPU, we fall back to a CPU-derived activity
+    // proxy computed from /proc/stat, explicitly labeled as a proxy.
+    private void FillComputedUtilization(GpuInfo info)
+    {
+        string? pci = info.PciBus;
+        if (string.IsNullOrEmpty(pci)) return;
+
+        string key = GpuPci.Normalize(pci);
+        var (busyNs, sawEngineData) = SumFdinfoEngineNs(pci);
+        DateTime now = DateTime.UtcNow;
+
+        if (_busyBaseline.TryGetValue(key, out var prev))
+        {
+            double elapsedMs = (now - prev.At).TotalMilliseconds;
+            if (elapsedMs >= 100)
+            {
+                if (sawEngineData)
+                {
+                    // Real per-process GPU busy time: genuine utilization.
+                    double busyMs = (busyNs - prev.BusyNs) / 1_000_000.0;
+                    double util = Math.Clamp(busyMs / elapsedMs * 100.0, 0, 100);
+                    info.Utilization = Math.Round(util, 1);
+                }
+                else if (info.Utilization == null && info.Kind == "Integrated")
+                {
+                    // No engine counters on this driver: compute a CPU-derived proxy
+                    // for the integrated APU (shares silicon with the CPU) from the
+                    // same "total vs idle" math the CPU provider uses.
+                    double? cpuPct = CpuUtilizationPercent();
+                    if (cpuPct.HasValue)
+                    {
+                        double p = Math.Round(cpuPct.Value, 1);
+                        info.Utilization = p;
+                        info.UtilizationText = $"{p}% (CPU proxy)";
+                    }
+                }
+            }
+        }
+
+        _busyBaseline[key] = (now, busyNs);
+    }
+
+    // drm-engine-* totals in fdinfo are grouped under a "drm-pdev: <pci slot>" header
+    // for each open GPU fd. We sum engine ns only for the block whose drm-pdev matches
+    // this GPU's PCI slot. Returns (total busy ns, whether any engine data was seen).
+    private static (long TotalNs, bool AnyData) SumFdinfoEngineNs(string pci)
+    {
+        string want = GpuPci.Normalize(pci);
+        long total = 0;
+        bool any = false;
+        try
+        {
+            foreach (var procDir in Directory.EnumerateDirectories("/proc"))
+            {
+                string pid = Path.GetFileName(procDir);
+                if (!int.TryParse(pid, out _)) continue;
+
+                string fdinfo = Path.Combine(procDir, "fdinfo");
+                if (!File.Exists(fdinfo)) continue;
+
+                try
+                {
+                    bool inBlock = false;
+                    foreach (string line in File.ReadAllLines(fdinfo))
+                    {
+                        int colon = line.IndexOf(':');
+                        if (colon <= 0) continue;
+                        string key = line[..colon].Trim();
+                        string value = line[(colon + 1)..].Trim();
+
+                        if (key == "drm-pdev")
+                        {
+                            inBlock = GpuPci.Normalize(value) == want;
+                            continue;
+                        }
+
+                        if (inBlock && key.StartsWith("drm-engine-", StringComparison.Ordinal))
+                        {
+                            any = true;
+                            if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long ns))
+                                total += ns;
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return (total, any);
+    }
+
+    // CPU busy % from /proc/stat deltas (same math as LinuxCpuProvider.GetUsagePercent,
+    // kept here so GPU proxying does not depend on the CPU provider).
+    private static (DateTime At, long Idle, long Total) _cpuBaseline;
+    private static double? CpuUtilizationPercent()
+    {
+        try
+        {
+            string? first = null;
+            foreach (string line in File.ReadAllLines("/proc/stat"))
+            {
+                if (line.StartsWith("cpu ", StringComparison.Ordinal)) { first = line; break; }
+            }
+            if (first == null) return null;
+
+            var parts = first.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 5) return null;
+
+            long idle = long.Parse(parts[4], CultureInfo.InvariantCulture) +
+                        (parts.Length > 5 ? long.Parse(parts[5], CultureInfo.InvariantCulture) : 0);   // idle + iowait
+            long total = 0;
+            for (int i = 1; i < parts.Length; i++)
+                total += long.Parse(parts[i], CultureInfo.InvariantCulture);
+
+            DateTime now = DateTime.UtcNow;
+            var prev = _cpuBaseline;
+            _cpuBaseline = (now, idle, total);
+
+            if (prev.Total <= 0) return null;                    // first sample
+            long dIdle = idle - prev.Idle;
+            long dTotal = total - prev.Total;
+            if (dTotal <= 0) return null;
+            double busy = 1.0 - (double)dIdle / dTotal;
+            return Math.Clamp(busy * 100.0, 0, 100);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private List<GpuInfo> BuildList()
@@ -541,6 +685,8 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                 if (string.IsNullOrWhiteSpace(name))
                     name = FallbackName(vendor, ReadTrimmed(Path.Combine(device, "device")));
 
+                string? driverVersion = ReadDriverVersion(device);
+
                 found.Add((index, new GpuInfo
                 {
                     DeviceId = card,
@@ -549,7 +695,8 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                     Kind = GpuClassifier.Classify(name, vendorRaw),
                     Vendor = string.IsNullOrWhiteSpace(vendor) ? null : vendor,
                     GraphicsApi = "Vulkan / OpenGL",
-                    PhysicalLocation = slot ?? card
+                    PhysicalLocation = slot ?? card,
+                    DriverVersion = driverVersion
                 }));
             }
         }
@@ -607,19 +754,60 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
     private static void TryDebugfsLoad(GpuInfo info)
     {
         if (info.DeviceId == null || !int.TryParse(info.DeviceId.AsSpan(4), out int index)) return;
-        string path = $"/sys/kernel/debug/dri/{index}/amdgpu_pm_info";
-        if (!File.Exists(path)) return;
-        foreach (var line in File.ReadAllLines(path))
+
+        // Try amdgpu first (amdgpu driver)
+        string amdgpuPath = $"/sys/kernel/debug/dri/{index}/amdgpu_pm_info";
+        if (File.Exists(amdgpuPath))
         {
-            if (!line.Contains("GPU Load", StringComparison.OrdinalIgnoreCase)) continue;
-            var tokens = line.Split(new[] { ':', '%', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var token in tokens)
+            foreach (var line in File.ReadAllLines(amdgpuPath))
             {
-                if (double.TryParse(token.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double v)
-                    && v >= 0 && v <= 100)
+                if (!line.Contains("GPU Load", StringComparison.OrdinalIgnoreCase)) continue;
+                var tokens = line.Split(new[] { ':', '%', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var token in tokens)
                 {
-                    info.Utilization = v;
-                    return;
+                    if (double.TryParse(token.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double v)
+                        && v >= 0 && v <= 100)
+                    {
+                        info.Utilization = v;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Try radeon driver (radeon driver on older AMD GPUs like Kaveri)
+        string radeonPath = $"/sys/kernel/debug/dri/{index}/radeon_pm_info";
+        if (File.Exists(radeonPath))
+        {
+            foreach (var line in File.ReadAllLines(radeonPath))
+            {
+                if (line.Contains("GPU Load", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("usage", StringComparison.OrdinalIgnoreCase))
+                {
+                    var tokens = line.Split(new[] { ':', '%', '\t', ' ', '=' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var token in tokens)
+                    {
+                        if (double.TryParse(token.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double v)
+                            && v >= 0 && v <= 100)
+                        {
+                            info.Utilization = v;
+                            break;
+                        }
+                    }
+                }
+                else if (line.Contains("temp", StringComparison.OrdinalIgnoreCase) && info.TemperatureC == null)
+                {
+                    var tokens = line.Split(new[] { ':', '=', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var token in tokens)
+                    {
+                        if (double.TryParse(token.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double t)
+                            && t > 0 && t < 200)
+                        {
+                            info.TemperatureC = t;
+                            info.TemperatureText = $"{t:F1} °C";
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -664,6 +852,34 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         return int.TryParse(name.AsSpan(4), out index);
     }
 
+    // Driver version from sysfs: resolve the driver symlink (e.g. "radeon",
+    // "amdgpu", "i915") and append the module version when exposed.
+    private static string? ReadDriverVersion(string devicePath)
+    {
+        try
+        {
+            string? driver = Directory.ResolveLinkTarget(Path.Combine(devicePath, "driver"), true)?.Name;
+            if (string.IsNullOrWhiteSpace(driver)) return null;
+
+            // Prefer the driver's own version attribute when present.
+            string verAttr = Path.Combine(devicePath, "driver", "version");
+            if (File.Exists(verAttr))
+            {
+                string? v = ReadTrimmed(verAttr);
+                if (!string.IsNullOrWhiteSpace(v)) return $"{driver} {v}";
+            }
+
+            // Fall back to the kernel module version (srcversion/module version).
+            string modVer = $"/sys/module/{driver}/version";
+            string? mv = ReadTrimmed(modVer);
+            if (!string.IsNullOrWhiteSpace(mv)) return $"{driver} {mv}";
+
+            // No version exposed — report the driver name only.
+            return driver;
+        }
+        catch { return null; }
+    }
+
     private static bool IsFramebufferDriver(string devicePath)
     {
         try
@@ -681,7 +897,21 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
     {
         try
         {
-            string full = Path.GetFullPath(devicePath);
+            // /sys/class/drm/cardN/device is a symlink chain that ends at the
+            // PCI device directory (e.g. .../0000:00:01.0). Path.GetFullPath
+            // does NOT resolve symlinks, so resolve the full link chain and use
+            // the resolved target's directory name as the PCI slot.
+            string full;
+            try
+            {
+                var resolved = Directory.ResolveLinkTarget(devicePath, returnFinalTarget: true);
+                full = resolved?.FullName ?? Path.GetFullPath(devicePath);
+            }
+            catch
+            {
+                full = Path.GetFullPath(devicePath);
+            }
+
             string name = Path.GetFileName(full.TrimEnd(Path.DirectorySeparatorChar));
             if (name.Contains(':') && name.Contains('.')) return name;
         }

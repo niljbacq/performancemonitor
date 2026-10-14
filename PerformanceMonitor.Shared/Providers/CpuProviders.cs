@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -14,7 +15,7 @@ public abstract class CpuProviderBase : ICpuProvider
     public abstract CpuSpecs GetSpecs();
     public abstract float GetUsagePercent();
 
-    public ProcessStats GetProcessStats()
+    public virtual ProcessStats GetProcessStats()
     {
         Process[] list = Process.GetProcesses();
         try
@@ -154,6 +155,12 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                 if (logical > 0) s.LogicalProcessors = logical.ToString();
             }
 
+            // Live speed: prefer cpufreq (kHz), fall back to the base clock from cpuinfo.
+            string? liveMhz = ReadLiveCpuMhz();
+            s.Speed = liveMhz != null
+                ? $"{double.Parse(liveMhz, System.Globalization.CultureInfo.InvariantCulture) / 1000.0:F2} GHz"
+                : s.BaseSpeed;
+
             string lscpu = CommandRunner.Run("lscpu", "");
             if (!string.IsNullOrEmpty(lscpu))
             {
@@ -162,10 +169,29 @@ public sealed class LinuxCpuProvider : CpuProviderBase
 
                 foreach (var line in lscpu.Split('\n'))
                 {
-                    if (line.StartsWith("L1d cache:") || line.StartsWith("L1i cache:"))
+                    var parts = line.Split(':', 2);
+                    if (parts.Length != 2) continue;
+                    string label = parts[0].Trim();
+                    string value = parts[1].Trim();
+                    // Remove "(N instances)" suffix
+                    int paren = value.IndexOf('(');
+                    if (paren > 0) value = value[..paren].Trim();
+
+                    if (label is "L1d" or "L1d cache" or "L1i" or "L1i cache")
                     {
-                        var parts = line.Split(':');
-                        if (parts.Length > 1) s.L1Cache = parts[1].Trim();
+                        s.L1Cache = value;
+                    }
+                    else if (label is "L2" or "L2 cache")
+                    {
+                        s.L2Cache = value;
+                    }
+                    else if (label is "L3" or "L3 cache")
+                    {
+                        s.L3Cache = value;
+                    }
+                    else if (label == "Socket(s)")
+                    {
+                        s.Sockets = value;
                     }
                 }
             }
@@ -205,5 +231,123 @@ public sealed class LinuxCpuProvider : CpuProviderBase
             return (float)Math.Clamp((1.0 - (double)idleDelta / totalDelta) * 100, 0, 100);
         }
         catch { return 0; }
+    }
+
+    // Current speed of CPU 0 (kHz), or null when unavailable.
+    private static string? ReadLiveCpuMhz()
+    {
+        try
+        {
+            string path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq";
+            if (File.Exists(path) && long.TryParse(File.ReadAllText(path).Trim(), out long khz) && khz > 0)
+                return (khz / 1000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch { }
+        return null;
+    }
+
+    // Per-core frequencies ("3.9 / 3.9 / 3.9 / 3.9 GHz") for the Per-core now row.
+    public string? PerCoreFrequencyText
+    {
+        get
+        {
+            try
+            {
+                var values = new List<string>();
+                for (int i = 0; i < Environment.ProcessorCount; i++)
+                {
+                    string path = $"/sys/devices/system/cpu/cpu{i}/cpufreq/scaling_cur_freq";
+                    if (File.Exists(path) && long.TryParse(File.ReadAllText(path).Trim(), out long khz) && khz > 0)
+                        values.Add((khz / 1000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+                }
+                return values.Count > 0 ? $"{string.Join(" / ", values)} GHz" : null;
+            }
+            catch { return null; }
+        }
+    }
+
+    // Real system uptime from /proc/uptime instead of the process's own tick count.
+    public long UptimeMilliseconds
+    {
+        get
+        {
+            try
+            {
+                if (File.Exists("/proc/uptime"))
+                {
+                    string text = File.ReadAllText("/proc/uptime").Trim();
+                    int sp = text.IndexOf(' ');
+                    if (sp > 0 && double.TryParse(text[..sp],
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double secs))
+                        return (long)(secs * 1000.0);
+                }
+            }
+            catch { }
+            return Environment.TickCount64;
+        }
+    }
+
+    // Linux has no per-process "handles" the way Windows does; the closest analogue
+    // is the count of open file descriptors across all processes. Process.HandleCount
+    // throws on Linux, so the base-class GetProcessStats would report N/A — this
+    // override sums /proc/<pid>/fd entries and falls back to the kernel-wide
+    // /proc/sys/fs/file-nr figure when a per-process read fails.
+    public override ProcessStats GetProcessStats()
+    {
+        try
+        {
+            int processes = 0;
+            long openFiles = 0;
+            bool anyFdRead = false;
+
+            foreach (var procDir in Directory.EnumerateDirectories("/proc"))
+            {
+                string pid = Path.GetFileName(procDir);
+                if (!int.TryParse(pid, out _)) continue;
+                processes++;
+
+                string fdDir = Path.Combine(procDir, "fd");
+                try
+                {
+                    openFiles += Directory.EnumerateFileSystemEntries(fdDir).LongCount();
+                    anyFdRead = true;
+                }
+                catch { /* permission denied on other users' processes */ }
+            }
+
+            string handlesText;
+            if (anyFdRead)
+            {
+                handlesText = $"{openFiles} open files";
+            }
+            else
+            {
+                // No per-process fd data (unlikely): fall back to the kernel-wide count.
+                long fileNr = ReadFileNr();
+                handlesText = fileNr > 0 ? $"{fileNr} open files (system)" : "N/A";
+            }
+
+            return new ProcessStats(processes, 0, handlesText);
+        }
+        catch
+        {
+            return new ProcessStats(0, 0, "N/A");
+        }
+    }
+
+    // /proc/sys/fs/file-nr: "allocated unused maximum" — the first column is the
+    // number of file handles currently allocated kernel-wide.
+    private static long ReadFileNr()
+    {
+        try
+        {
+            if (!File.Exists("/proc/sys/fs/file-nr")) return 0;
+            string line = File.ReadAllText("/proc/sys/fs/file-nr").Trim();
+            int sp = line.IndexOf(' ');
+            if (sp > 0 && long.TryParse(line[..sp], out long v)) return v;
+        }
+        catch { }
+        return 0;
     }
 }

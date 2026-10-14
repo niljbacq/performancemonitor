@@ -276,8 +276,8 @@ public static class ProviderFactory
     {
         if (MemoryFactory != null) return MemoryFactory();
         if (OperatingSystem.IsAndroid()) return new NullMemoryProvider();
-        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
-            return new HardwareInfoMemoryProvider();
+        if (OperatingSystem.IsWindows()) return new HardwareInfoMemoryProvider();
+        if (OperatingSystem.IsLinux()) return new LinuxMemoryProvider();
         return new NullMemoryProvider();
     }
 }

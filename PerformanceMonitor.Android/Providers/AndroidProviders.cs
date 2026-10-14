@@ -273,6 +273,15 @@ public sealed class AndroidDiskProvider : IDiskProvider
 {
     private const string Unavailable = "Not available on Android";
 
+    // Per-app disk I/O (no root needed): /proc/self/io exposes the app's own
+    // read/write bytes since process start. We keep a baseline and report the
+    // delta over the sample window, labeled as app-level, so the Disk tab shows
+    // live activity instead of a flat "Not available".
+    private long _lastReadBytes;
+    private long _lastWriteBytes;
+    private DateTime _lastSampleUtc;
+    private bool _haveBaseline;
+
     public DiskSpecs GetSpecs()
     {
         var s = new DiskSpecs
@@ -334,7 +343,61 @@ public sealed class AndroidDiskProvider : IDiskProvider
         return s;
     }
 
-    public DiskSample? Sample() => new DiskSample { NotSupported = true, NotSupportedMessage = Unavailable };
+    public DiskSample? Sample()
+    {
+        // Per-app live I/O from /proc/self/io. System-wide counters need root,
+        // but this shows real activity produced by this app (our own reads/writes).
+        var io = ReadSelfIo();
+        DateTime now = DateTime.UtcNow;
+
+        if (!_haveBaseline)
+        {
+            _lastReadBytes = io.readBytes;
+            _lastWriteBytes = io.writeBytes;
+            _lastSampleUtc = now;
+            _haveBaseline = true;
+            return null;   // first tick: nothing to compare yet
+        }
+
+        double elapsedMs = (now - _lastSampleUtc).TotalMilliseconds;
+        long dRead = Math.Max(0, io.readBytes - _lastReadBytes);
+        long dWrite = Math.Max(0, io.writeBytes - _lastWriteBytes);
+        _lastReadBytes = io.readBytes;
+        _lastWriteBytes = io.writeBytes;
+        _lastSampleUtc = now;
+
+        if (elapsedMs < 200) return null;   // too soon after baseline; skip
+
+        return new DiskSample
+        {
+            ReadBytesPerSec = dRead / (elapsedMs / 1000.0),
+            WriteBytesPerSec = dWrite / (elapsedMs / 1000.0),
+            ActivePercent = dRead + dWrite > 0 ? Math.Clamp((dRead + dWrite) / (1024.0 * 1024.0) / 10.0, 0, 100) : 0,
+            ResponseMs = null
+        };
+    }
+
+    private static (long readBytes, long writeBytes) ReadSelfIo()
+    {
+        try
+        {
+            long read = 0, write = 0;
+            foreach (string line in File.ReadAllLines("/proc/self/io"))
+            {
+                int colon = line.IndexOf(':');
+                if (colon <= 0) continue;
+                string key = line[..colon].Trim();
+                string value = line[(colon + 1)..].Trim();
+                if (key == "read_bytes" && long.TryParse(value, out long r)) read = r;
+                else if (key == "write_bytes" && long.TryParse(value, out long w)) write = w;
+            }
+            return (read, write);
+        }
+        catch
+        {
+            return (0, 0);
+        }
+    }
 }
 
 public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
@@ -420,9 +483,65 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
             info.UtilizationText = Unavailable;
             info.TemperatureText = Unavailable;
             info.MemoryUsage = Unavailable;
+
+            // Best-effort thermal: many SoCs expose the GPU temperature via a
+            // thermal-zone symlink. Unreadable paths simply stay "Not available".
+            double? temp = ReadGpuTemperature();
+            if (temp.HasValue)
+            {
+                info.TemperatureC = temp.Value;
+                info.TemperatureText = $"{temp.Value:F1} °C";
+            }
+
             list.Add(info);
         }
         return list;
+    }
+
+    private static double? ReadGpuTemperature()
+    {
+        try
+        {
+            // Common locations: /sys/class/thermal/thermal_zoneN/type == "gpu*" with a temp_milli_deg
+            // or temp file, and vendor paths like /sys/kernel/gpu/temperature.
+            foreach (string zone in Directory.GetDirectories("/sys/class/thermal", "thermal_zone*"))
+            {
+                string type = Fmt.ReadText(Path.Combine(zone, "type")) ?? "";
+                if (!type.StartsWith("gpu", StringComparison.OrdinalIgnoreCase)) continue;
+
+                double? c = ReadZoneTemp(zone);
+                if (c.HasValue) return c.Value;
+            }
+
+            string? vendor = Fmt.ReadText("/sys/kernel/gpu/temperature")
+                             ?? Fmt.ReadText("/sys/kernel/gpu/gpu_temperature");
+            if (vendor != null && double.TryParse(vendor, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double vt))
+            {
+                // Some vendors report millidegrees, others plain degrees; the
+                // sanity window (-40..200 °C) tells them apart.
+                if (vt > 200) return vt / 1000.0;
+                if (vt > -40) return vt;
+            }
+            return null;
+        }
+        catch { return null; }
+    }
+
+    private static double? ReadZoneTemp(string zone)
+    {
+        string[] candidates = { "temp", "temp1_input" };
+        foreach (string c in candidates)
+        {
+            string? raw = Fmt.ReadText(Path.Combine(zone, c));
+            if (raw != null && double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double v))
+            {
+                double cels = v / 1000.0;   // sysfs thermal zones use millidegrees
+                if (cels > -40 && cels < 200) return cels;
+            }
+        }
+        return null;
     }
 }
 

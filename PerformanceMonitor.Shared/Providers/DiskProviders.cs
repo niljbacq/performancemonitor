@@ -240,7 +240,7 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
     {
         var result = new List<DiskInfo>();
         string? systemDev = FindSystemBlockDevice();
-        bool hasSwap = File.Exists("/proc/swaps") && File.ReadAllLines("/proc/swaps").Length > 1;
+        var swapDevices = ReadSwapDevices();   // /proc/swaps -> set of backing device names
 
         try
         {
@@ -274,13 +274,47 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
                     Capacity = capacity,
                     Formatted = capacity,
                     SystemDisk = dev == systemDev ? "Yes" : "No",
-                    PageFile = hasSwap ? "Yes" : "No"
+                    PageFile = HasSwapOnDevice(swapDevices, dev) ? "Yes" : "No",
+                    UsedText = GetUsedText(dev),
+                    FreeText = GetFreeText(dev)
                 });
             }
         }
         catch { }
 
         return result;
+    }
+
+    // /proc/swaps: "Filename Type Size Used Priority" — the backing device may be
+    // a partition (sda2), a whole disk (sdb), or a zram device. We mark any disk
+    // whose name is a prefix of a swap file device.
+    private static HashSet<string> ReadSwapDevices()
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            if (!File.Exists("/proc/swaps")) return set;
+            foreach (string line in File.ReadAllLines("/proc/swaps"))
+            {
+                if (line.StartsWith("Filename", StringComparison.OrdinalIgnoreCase)) continue;
+                int space = line.IndexOf(' ');
+                if (space <= 0) continue;
+                string file = line[..space].Trim();
+                if (!file.StartsWith("/dev/", StringComparison.Ordinal)) continue;
+                set.Add(Path.GetFileName(file));
+            }
+        }
+        catch { }
+        return set;
+    }
+
+    private static bool HasSwapOnDevice(HashSet<string> swapDevices, string dev)
+    {
+        foreach (string s in swapDevices)
+        {
+            if (s == dev || s.StartsWith(dev, StringComparison.Ordinal)) return true;
+        }
+        return false;
     }
 
     private void FillSample(DiskInfo info, string dev, DateTime now)
@@ -331,7 +365,21 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
             long dWriteTime = Math.Max(0, writeTimeMs - st.LastWriteTimeMs);
 
             double elapsedMs = (now - st.LastSampleUtc).TotalMilliseconds;
-            if (elapsedMs < 100) elapsedMs = 1000;
+            if (elapsedMs < 200)
+            {
+                // Too soon after the baseline sample: deltas are unrepresentative
+                // (rates would look like 0 KB/s with 100% active). Skip this tick
+                // and let the next sample produce meaningful values.
+                st.LastReadBytes = readBytes;
+                st.LastWriteBytes = writeBytes;
+                st.LastIoTicksMs = ioTicksMs;
+                st.LastReadsCompleted = readsCompleted;
+                st.LastWritesCompleted = writesCompleted;
+                st.LastReadTimeMs = readTimeMs;
+                st.LastWriteTimeMs = writeTimeMs;
+                st.LastSampleUtc = now;
+                return;
+            }
 
             info.ReadBytesPerSec = dRead / (elapsedMs / 1000.0);
             info.WriteBytesPerSec = dWrite / (elapsedMs / 1000.0);
@@ -395,6 +443,77 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
                     if (block != null && (name == block || name.StartsWith(block)))
                         return block;
                 }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    // Locate the first mount point that belongs to this block device.
+    private static string? FindMountPoint(string dev)
+    {
+        try
+        {
+            foreach (var line in File.ReadAllLines("/proc/mounts"))
+            {
+                var cols = line.Split(' ');
+                if (cols.Length < 2 || !cols[0].StartsWith("/dev/")) continue;
+                string name = Path.GetFileName(cols[0]);
+                if (name == dev || name.StartsWith(dev))
+                {
+                    string mp = cols[1];
+                    if (mp == "/") return "/";
+                    // Skip virtual filesystems that share the same device name prefix.
+                    if (mp.StartsWith("/dev/") || mp.StartsWith("/proc/") || mp.StartsWith("/sys/"))
+                        continue;
+                    return mp;
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    // DriveInfo on Linux names drives by mount point; "/" stays "/" (never stripped).
+    private static bool DriveNameMatches(string driveName, string mountPoint)
+    {
+        string name = driveName.TrimEnd('/');
+        if (name.Length == 0) return mountPoint == "/";
+        return name == mountPoint;
+    }
+
+    private static string? GetUsedText(string dev)
+    {
+        string? mp = FindMountPoint(dev);
+        if (mp == null) return null;
+        try
+        {
+            foreach (var d in DriveInfo.GetDrives())
+            {
+                if (!DriveNameMatches(d.Name, mp)) continue;
+                if (!d.IsReady || d.TotalSize <= 0) return null;
+                double total = d.TotalSize / (1024.0 * 1024 * 1024);
+                double used = (d.TotalSize - d.AvailableFreeSpace) / (1024.0 * 1024 * 1024);
+                return $"{Math.Round(used, 1)} GB ({used / total * 100:F1}%)";
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private static string? GetFreeText(string dev)
+    {
+        string? mp = FindMountPoint(dev);
+        if (mp == null) return null;
+        try
+        {
+            foreach (var d in DriveInfo.GetDrives())
+            {
+                if (!DriveNameMatches(d.Name, mp)) continue;
+                if (!d.IsReady || d.TotalSize <= 0) return null;
+                double total = d.TotalSize / (1024.0 * 1024 * 1024);
+                double free = d.AvailableFreeSpace / (1024.0 * 1024 * 1024);
+                return $"{Math.Round(free, 1)} GB ({free / total * 100:F1}%)";
             }
         }
         catch { }
