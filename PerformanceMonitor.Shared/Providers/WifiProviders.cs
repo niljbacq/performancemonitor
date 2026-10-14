@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Text.RegularExpressions;
 
 namespace TaskManager.Providers;
@@ -53,12 +54,16 @@ public sealed class LinuxWifiProvider : IWifiProvider
             {
                 if (!line.StartsWith("yes:", StringComparison.OrdinalIgnoreCase)) continue;
 
-                var parts = line.Split(':');
-                if (parts.Length >= 3)
+                // nmcli -t escapes ':' as '\:' — find the first and last unescaped colon
+                int firstColon = line.IndexOf(':');
+                int lastColon = line.LastIndexOf(':');
+                if (firstColon > 0 && lastColon > firstColon)
                 {
+                    string ssidPart = line.Substring(firstColon + 1, lastColon - firstColon - 1).Replace("\\:", ":");
+                    string signalPart = line[(lastColon + 1)..];
                     status = "Connected";
-                    ssid = parts[1];
-                    signalStrength = $"📶 {parts[2]}%";
+                    ssid = ssidPart;
+                    signalStrength = $"📶 {signalPart}%";
                     detected = true;
                     break;
                 }
@@ -91,150 +96,168 @@ public sealed class LinuxWifiProvider : IWifiProvider
 
     public WifiSnapshot? GetSnapshot()
     {
-        try
+        string? iface = FindWifiIface();
+        if (iface == null)
+            return new WifiSnapshot("Wi-Fi", "Disconnected", "No wireless iface", "-", "-", "-", "-", null, null);
+
+        string link = CommandRunner.Run("iw", $"dev {iface} link", 2000);
+        bool connected = link.Contains("Connected to", StringComparison.OrdinalIgnoreCase);
+
+        string? ssid = Match(link, @"SSID:\s*(.+)");
+        string? bssid = Match(link, @"Connected to\s+([0-9a-fA-F:]{17})");
+        string? signalDbm = Match(link, @"signal:\s*(-?\d+)\s*dBm");
+        string? freqText = Match(link, @"freq:\s*(\d+)");
+        string? rxBitrate = Match(link, @"rx bitrate:\s*(.+)");
+
+        if (ssid == null)
         {
-            NetworkInterface? wifi = NetworkInterface.GetAllNetworkInterfaces()
-                .FirstOrDefault(nic => (nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ||
-                                        nic.Name.StartsWith("wlan", StringComparison.OrdinalIgnoreCase) ||
-                                        nic.Name.StartsWith("wlp", StringComparison.OrdinalIgnoreCase) ||
-                                        nic.Name.StartsWith("wlx", StringComparison.OrdinalIgnoreCase)) &&
-                                       nic.OperationalStatus == OperationalStatus.Up);
-
-            if (wifi == null)
-                return new WifiSnapshot("Wi-Fi", "Disconnected", "Not connected", "-", "-", "-", "-", null, null);
-
-            string adapterName = string.IsNullOrWhiteSpace(wifi.Description) ? wifi.Name : wifi.Description;
-
-            var ipProps = wifi.GetIPProperties();
-            string ipv4 = IpOf(ipProps, System.Net.Sockets.AddressFamily.InterNetwork);
-            string ipv6 = IpOf(ipProps, System.Net.Sockets.AddressFamily.InterNetworkV6);
-
-            var stats = wifi.GetIPv4Statistics();
-            long sent = stats.BytesSent;
-            long received = stats.BytesReceived;
-
-            var details = GetDetails(wifi.Name);
-
-            string? gateway = FirstGateway(ipProps);
-            string? netmask = FirstNetmask(ipProps);
-            var (dns1, dns2) = ReadDns(resolvConfPath: "/etc/resolv.conf");
-            string? dhcpServer = ReadDhcpServer(wifi.Name);
-
-            string? wifiStandard = null;
-            string? signalPercent = null;
-            string? bssid = null;
-            if (details.Status == "Connected")
-            {
-                // signal "📶 78%" -> percent; iw dev link has "signal: -45 dBm"
-                var sig = Regex.Match(details.SignalStrength, @"\d+");
-                if (sig.Success)
-                {
-                    if (details.SignalStrength.Contains('%')) signalPercent = details.SignalStrength;
-                    else if (int.TryParse(sig.Value, out int dBm))
-                        signalPercent = $"📶 {PercentFromDbm(dBm)}%";
-                }
-                if (signalPercent == null) signalPercent = details.SignalStrength;
-
-                string linkOut = CommandRunner.Run("iw", $"dev {wifi.Name} link", 2000);
-
-                var ssidMatch = Regex.Match(linkOut, @"SSID:\s*(.+)");
-                if (ssidMatch.Success) details = new WifiDetails(details.Status, ssidMatch.Groups[1].Value.Trim(), details.ConnectionType, signalPercent);
-
-                bssid = ReadBssid(wifi.Name);
-
-                var freqM = Regex.Match(linkOut, @"freq:\s*(\d+)");
-                if (freqM.Success && int.TryParse(freqM.Groups[1].Value, out int f))
-                {
-                    if (f >= 5925) wifiStandard = "Wi-Fi 6E / 7 (6 GHz)";
-                    else if (f >= 4900) wifiStandard = "Wi-Fi 5/6 (5 GHz)";
-                    else wifiStandard = "Wi-Fi 4/5 (2.4 GHz)";
-                }
-            }
-
-            return new WifiSnapshot(
-                adapterName, details.Status, details.Ssid, details.ConnectionType, details.SignalStrength,
-                ipv4, ipv6, sent, received)
-            {
-                WifiStandard = wifiStandard,
-                SignalPercentText = signalPercent,
-                Bssid = bssid,
-                DhcpServer = dhcpServer,
-                Gateway = gateway,
-                Dns1 = dns1,
-                Dns2 = dns2,
-                Netmask = netmask
-            };
+            string id = CommandRunner.Run("iwgetid", $"{iface} -r", 1500);
+            if (!string.IsNullOrWhiteSpace(id)) ssid = id.Trim();
         }
-        catch
+
+        int.TryParse(signalDbm, out int dbm);
+        int.TryParse(freqText, out int freqMhz);
+        string band = freqMhz >= 5925 ? "6 GHz" : freqMhz >= 4900 ? "5 GHz" : freqMhz >= 2400 ? "2.4 GHz" : "";
+        string standard = StandardFromBitrate(rxBitrate);
+        string signal = signalDbm != null ? $"📶 {dbm} dBm" : "-";
+        string? percent = signalDbm != null ? $"{Math.Clamp(2 * (dbm + 100), 0, 100)}%" : null;
+
+        var (ipv4, ipv6, prefix) = ReadAddresses(iface);
+        string? gateway = ReadGateway(iface);
+        var dns = ReadDns();
+        var (sent, recv) = ReadProcNetDev(iface);
+
+        string status = connected || ssid != null ? "Connected" : "Disconnected";
+        return new WifiSnapshot(iface, status, ssid ?? "Not connected",
+            string.Join(" ", new[] { "802.11", standard, band }.Where(s => !string.IsNullOrEmpty(s))),
+            signal, ipv4, ipv6, sent, recv)
         {
-            return null;
-        }
+            WifiStandard = string.IsNullOrEmpty(standard) ? null : standard,
+            SignalPercentText = percent,
+            Bssid = bssid,
+            Gateway = gateway,
+            Dns1 = dns.ElementAtOrDefault(0),
+            Dns2 = dns.ElementAtOrDefault(1),
+            Netmask = prefix,
+            DhcpServer = ReadDhcp(iface),
+            DownloadText = recv is long rx ? $"{rx / 1048576.0:F1} MB since boot" : null,
+            UploadText = sent is long tx ? $"{tx / 1048576.0:F1} MB since boot" : null
+        };
     }
 
-    private static string IpOf(IPInterfaceProperties props, System.Net.Sockets.AddressFamily family)
+    private static string? FindWifiIface()
     {
-        var addr = props.UnicastAddresses.FirstOrDefault(a => a.Address.AddressFamily == family);
-        return addr?.Address.ToString() ?? "-";
+        string sys = "/sys/class/net";
+        if (!Directory.Exists(sys)) return null;
+        foreach (string dir in Directory.GetDirectories(sys))
+        {
+            string name = Path.GetFileName(dir);
+            if (name == "lo") continue;
+            if (Directory.Exists(Path.Combine(dir, "wireless")) ||
+                Directory.Exists(Path.Combine(dir, "phy80211")))
+                return name;
+        }
+        return null;
     }
 
-    private static string? FirstGateway(IPInterfaceProperties props)
-        => props.GatewayAddresses.Count > 0 ? props.GatewayAddresses[0].Address?.ToString() : null;
-
-    private static string? FirstNetmask(IPInterfaceProperties props)
-        => props.UnicastAddresses
-            .FirstOrDefault(a => a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?
-            .IPv4Mask?.ToString();
-
-    private static (string?, string?) ReadDns(string resolvConfPath)
+    // /proc/net/dev: "iface: rx_bytes rx_packets ... tx_bytes ..."  rx is field 1, tx is field 9
+    private static (long? rx, long? tx) ReadProcNetDev(string iface)
     {
-        string dns1 = "-", dns2 = "-";
         try
         {
-            if (File.Exists(resolvConfPath))
+            foreach (string line in File.ReadLines("/proc/net/dev"))
             {
-                var v = File.ReadAllLines(resolvConfPath)
-                    .Select(l => l.Trim())
-                    .Where(l => l.StartsWith("nameserver ", StringComparison.Ordinal))
-                    .Select(l => l["nameserver ".Length..].Trim())
-                    .Where(s => s.Length > 0)
-                    .ToList();
-                if (v.Count > 0) dns1 = v[0];
-                if (v.Count > 1) dns2 = v[1];
+                int colon = line.IndexOf(':');
+                if (colon < 0 || line[..colon].Trim() != iface) continue;
+                string[] f = line[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (f.Length < 10) return (null, null);
+                long.TryParse(f[0], out long rx);
+                long.TryParse(f[8], out long tx);
+                return (rx, tx);
             }
         }
         catch { }
-        return (dns1, dns2);
+        return (null, null);
     }
 
-    private static string? ReadDhcpServer(string iface)
+    // /proc/net/route: dest 00000000, gateway is little-endian hex
+    private static string? ReadGateway(string iface)
     {
-        string route = CommandRunner.Run("ip", "route", 2000);
-        string? server = null;
-        foreach (string line in route.Split('\n'))
+        try
         {
-            if (!line.Contains(iface, StringComparison.OrdinalIgnoreCase)) continue;
-            if (line.Contains("default", StringComparison.OrdinalIgnoreCase))
+            foreach (string line in File.ReadLines("/proc/net/route"))
             {
-                var m = Regex.Match(line, @"via\s+([0-9.]+)");
-                if (m.Success) server = m.Groups[1].Value;
+                string[] f = line.Split('\t', StringSplitOptions.RemoveEmptyEntries);
+                if (f.Length < 3 || f[0] != iface || f[1] != "00000000") continue;
+                if (!uint.TryParse(f[2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint g)) continue;
+                return $"{g & 0xFF}.{(g >> 8) & 0xFF}.{(g >> 16) & 0xFF}.{(g >> 24) & 0xFF}";
             }
         }
-        // The DHCP server itself is often the "dhcp server" option, which `ip route` does not show.
-        // Best effort: the gateway we just found.
-        return server;
+        catch { }
+        return null;
     }
 
-    private static string? ReadBssid(string iface)
+    private static List<string> ReadDns()
     {
-        string scan = CommandRunner.Run("iw", $"dev {iface} link", 2000);
-        var m = Regex.Match(scan, @"Connected to\s+([0-9a-fA-F:]{17})");
+        string path = File.Exists("/run/systemd/resolve/resolv.conf")
+            ? "/run/systemd/resolve/resolv.conf"   // real upstream, not the 127.0.0.53 stub
+            : "/etc/resolv.conf";
+        var list = new List<string>();
+        if (!File.Exists(path)) return list;
+        foreach (string line in File.ReadLines(path))
+        {
+            if (!line.StartsWith("nameserver ", StringComparison.Ordinal)) continue;
+            string ip = line["nameserver ".Length..].Trim();
+            if (ip != "127.0.0.53") list.Add(ip);
+        }
+        return list;
+    }
+
+    private static string? ReadDhcp(string iface)
+    {
+        // nmcli -t escapes ':' as '\:' — do not Split(':')
+        string raw = CommandRunner.Run("nmcli", $"-t -f DHCP4.OPTION device show {iface}", 2000);
+        var m = Regex.Match(raw, @"dhcp_server_identifier\s*=\s*([0-9.]+)");
         return m.Success ? m.Groups[1].Value : null;
     }
 
-    private static int PercentFromDbm(int dBm)
+    private static string StandardFromBitrate(string? rx)
     {
-        // Standard mapping: -50 dBm => ~100%, -100 dBm => ~0%.
-        int pct = (int)Math.Round((dBm + 100) * 2.0);
-        return Math.Clamp(pct, 0, 100);
+        if (string.IsNullOrEmpty(rx)) return "";
+        if (rx.Contains("EHT")) return "Wi-Fi 7 (802.11be)";
+        if (rx.Contains("HE")) return "Wi-Fi 6 (802.11ax)";
+        if (rx.Contains("VHT")) return "Wi-Fi 5 (802.11ac)";
+        if (rx.Contains("HT")) return "Wi-Fi 4 (802.11n)";
+        return "802.11a/b/g";
+    }
+
+    private static (string ipv4, string ipv6, string? mask) ReadAddresses(string iface)
+    {
+        string ipv4 = "-", ipv6 = "-";
+        string? mask = null;
+        try
+        {
+            var nic = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n => n.Name == iface);
+            if (nic == null) return (ipv4, ipv6, mask);
+            foreach (var ua in nic.GetIPProperties().UnicastAddresses)
+            {
+                if (ua.Address.AddressFamily == AddressFamily.InterNetwork && ipv4 == "-")
+                {
+                    ipv4 = ua.Address.ToString();
+                    mask = ua.IPv4Mask?.ToString();
+                }
+                else if (ua.Address.AddressFamily == AddressFamily.InterNetworkV6 && ipv6 == "-"
+                         && !ua.Address.IsIPv6LinkLocal)
+                    ipv6 = ua.Address.ToString();
+            }
+        }
+        catch { }
+        return (ipv4, ipv6, mask);
+    }
+
+    private static string? Match(string text, string pattern)
+    {
+        var m = Regex.Match(text, pattern);
+        return m.Success ? m.Groups[1].Value.Trim() : null;
     }
 }

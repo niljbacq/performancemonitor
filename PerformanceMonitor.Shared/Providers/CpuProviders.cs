@@ -297,38 +297,31 @@ public sealed class LinuxCpuProvider : CpuProviderBase
     {
         try
         {
-            int processes = 0;
-            long openFiles = 0;
-            bool anyFdRead = false;
-
+            int processes = 0, threads = 0, fds = 0;
             foreach (var procDir in Directory.EnumerateDirectories("/proc"))
             {
                 string pid = Path.GetFileName(procDir);
-                if (!int.TryParse(pid, out _)) continue;
+                if (string.IsNullOrEmpty(pid) || !pid.All(char.IsDigit)) continue;
                 processes++;
 
-                string fdDir = Path.Combine(procDir, "fd");
                 try
                 {
-                    openFiles += Directory.EnumerateFileSystemEntries(fdDir).LongCount();
-                    anyFdRead = true;
+                    foreach (string line in File.ReadLines(Path.Combine(procDir, "status")))
+                    {
+                        if (!line.StartsWith("Threads:", StringComparison.Ordinal)) continue;
+                        string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length >= 2 && int.TryParse(parts[1], out int t)) threads += t;
+                        break;
+                    }
                 }
-                catch { /* permission denied on other users' processes */ }
+                catch { }
+
+                try { fds += Directory.GetFiles(Path.Combine(procDir, "fd")).Length; }
+                catch { } // other users' fds are not readable
             }
 
-            string handlesText;
-            if (anyFdRead)
-            {
-                handlesText = $"{openFiles} open files";
-            }
-            else
-            {
-                // No per-process fd data (unlikely): fall back to the kernel-wide count.
-                long fileNr = ReadFileNr();
-                handlesText = fileNr > 0 ? $"{fileNr} open files (system)" : "N/A";
-            }
-
-            return new ProcessStats(processes, 0, handlesText);
+            string handles = fds > 0 ? $"{fds} open files" : "Open files unreadable";
+            return new ProcessStats(processes, threads, handles);
         }
         catch
         {

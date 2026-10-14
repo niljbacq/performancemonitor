@@ -120,7 +120,7 @@ public partial class WifiViewModel : ViewModelBase
                         oldBytesReceived = 0;
                         if (connected)
                         {
-                            sendText = receiveText = "Not available on Android";
+                            sendText = receiveText = "Throughput unavailable";
                             sendKbps = receiveKbps = 0;
                         }
                     }

@@ -1,5 +1,10 @@
 using Hardware.Info;
 using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Management;
+using System.Runtime.Versioning;
 
 namespace TaskManager.Providers;
 
@@ -18,6 +23,91 @@ public sealed class HardwareInfoMemoryProvider : IMemoryProvider
         double usedGB = Math.Round(usedBytes / (1024.0 * 1024.0 * 1024.0), 1);
         double percent = Math.Round((usedGB / totalGB) * 100, 0);
 
-        return new MemoryUsage(totalGB, usedGB, percent);
+        // Windows page file via WMI
+        string? swap = null;
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                using var searcher = new ManagementObjectSearcher(
+                    "SELECT AllocatedBaseSize, CurrentUsage FROM Win32_PageFileUsage");
+                ulong allocMb = 0, usedMb = 0;
+                foreach (ManagementObject o in searcher.Get())
+                {
+                    allocMb += Convert.ToUInt64(o["AllocatedBaseSize"]);
+                    usedMb += Convert.ToUInt64(o["CurrentUsage"]);
+                }
+                swap = allocMb == 0
+                    ? "No page file"
+                    : $"{usedMb / 1024.0:F2} GB / {allocMb / 1024.0:F2} GB ({usedMb * 100.0 / allocMb:F0}%)";
+            }
+            catch { swap = "Page file unreadable (WMI)"; }
+        }
+
+        return new MemoryUsage(totalGB, usedGB, percent) { SwapText = swap };
+    }
+}
+
+/// <summary>
+/// Linux memory via /proc/meminfo, including Swap / ZRAM / Active / Inactive / Slab
+/// rows so the desktop Linux Memory tab matches the Android one.
+/// </summary>
+public sealed class LinuxMemoryProvider : IMemoryProvider
+{
+    public MemoryUsage GetUsage()
+    {
+        var kb = ReadMemInfo();
+        double total = Kb(kb, "MemTotal");
+        double available = kb.ContainsKey("MemAvailable") ? Kb(kb, "MemAvailable") : Kb(kb, "MemFree");
+        double used = Math.Max(0, total - available);
+        const double gb = 1024.0 * 1024.0; // meminfo values are kB
+
+        bool zram = File.Exists("/proc/swaps") &&
+                    File.ReadAllText("/proc/swaps").Contains("zram", StringComparison.OrdinalIgnoreCase);
+
+        return new MemoryUsage(
+            Math.Round(total / gb, 1),
+            Math.Round(used / gb, 1),
+            total > 0 ? Math.Round(used / total * 100, 0) : 0)
+        {
+            SwapText = FormatSwap(kb, zram),
+            ActiveText = FormatGb(kb, "Active"),
+            InactiveText = FormatGb(kb, "Inactive"),
+            SlabText = FormatGb(kb, "Slab")
+        };
+    }
+
+    private static Dictionary<string, long> ReadMemInfo()
+    {
+        var result = new Dictionary<string, long>();
+        try
+        {
+            foreach (string line in File.ReadLines("/proc/meminfo"))
+            {
+                int colon = line.IndexOf(':');
+                if (colon <= 0) continue;
+                string[] parts = line[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length > 0 && long.TryParse(parts[0], out long value))
+                    result[line[..colon]] = value;
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    private static double Kb(Dictionary<string, long> kb, string key)
+        => kb.TryGetValue(key, out long v) ? v : 0;
+
+    private static string? FormatGb(Dictionary<string, long> kb, string key)
+        => kb.TryGetValue(key, out long v) ? $"{v / 1024.0 / 1024.0:F2} GB" : null;
+
+    private static string FormatSwap(Dictionary<string, long> kb, bool zram)
+    {
+        if (!kb.TryGetValue("SwapTotal", out long total) || !kb.TryGetValue("SwapFree", out long free))
+            return "Swap unreadable (/proc/meminfo)";
+        if (total == 0) return "Not in use";
+        double used = total - free;
+        string kind = zram ? "zram" : "swap";
+        return $"{used / 1024 / 1024:F2} GB / {total / 1024.0 / 1024:F2} GB ({used / total * 100:F0}%) {kind}";
     }
 }

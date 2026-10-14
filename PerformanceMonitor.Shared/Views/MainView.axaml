@@ -130,7 +130,7 @@
 
                 <!-- Memory View Template -->
                 <DataTemplate DataType="{x:Type vm:MemoryViewModel}">
-                    <Grid RowDefinitions="Auto, Auto, *" Margin="24">
+                    <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="24">
                         <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,20">
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="Memory" FontSize="28" FontWeight="SemiBold" Foreground="White"/>
@@ -147,7 +147,26 @@
                             <ProgressBar Value="{Binding MemoryUsagePercentValue}" Minimum="0" Maximum="100" Height="12" Foreground="#0078D4" Background="#333333" CornerRadius="4"/>
                         </StackPanel>
 
-                        <UniformGrid Grid.Row="2" Columns="2" Rows="2" VerticalAlignment="Top">
+                        <StackPanel Grid.Row="2" Spacing="4" Margin="0,0,0,16">
+                            <DockPanel IsVisible="{Binding SwapText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="Swap / ZRAM" Foreground="#888888"/>
+                                <TextBlock Text="{Binding SwapText}" Foreground="White" HorizontalAlignment="Right"/>
+                            </DockPanel>
+                            <DockPanel IsVisible="{Binding ActiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="Active" Foreground="#888888"/>
+                                <TextBlock Text="{Binding ActiveText}" Foreground="White" HorizontalAlignment="Right"/>
+                            </DockPanel>
+                            <DockPanel IsVisible="{Binding InactiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="Inactive" Foreground="#888888"/>
+                                <TextBlock Text="{Binding InactiveText}" Foreground="White" HorizontalAlignment="Right"/>
+                            </DockPanel>
+                            <DockPanel IsVisible="{Binding SlabText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="Slab (kernel)" Foreground="#888888"/>
+                                <TextBlock Text="{Binding SlabText}" Foreground="White" HorizontalAlignment="Right"/>
+                            </DockPanel>
+                        </StackPanel>
+
+                        <UniformGrid Grid.Row="3" Columns="2" Rows="2" VerticalAlignment="Top">
                             <Border Background="#252526" CornerRadius="6" Padding="16" Margin="0,0,10,10">
                                 <StackPanel>
                                     <TextBlock Text="In use" FontSize="12" Foreground="#888888"/>

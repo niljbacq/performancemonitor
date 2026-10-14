@@ -734,8 +734,8 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         string busyPath = Path.Combine(device, "gpu_busy_percent");
         if (TryReadDouble(busyPath, out double busy))
             info.Utilization = busy;
-        else
-            TryDebugfsLoad(info);
+        else if (!TryDebugfsLoad(info))
+            info.UtilizationText = DebugfsReason(info, device);
 
         if (TryReadTempC(device, out double temp))
             info.TemperatureC = temp;
@@ -744,6 +744,8 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
             ReadLong(Path.Combine(device, "mem_info_vram_used")),
             ReadLong(Path.Combine(device, "mem_info_vram_total")));
         if (vram != null) info.MemoryUsage = vram;
+        else if (ReadDriverName(device) == "radeon")
+            info.MemoryUsage = "Not exposed by radeon (amdgpu only)";
 
         string? gtt = FormatBytePair(
             ReadLong(Path.Combine(device, "mem_info_gtt_used")),
@@ -751,66 +753,53 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         if (gtt != null) info.SharedMemoryUsage = gtt;
     }
 
-    private static void TryDebugfsLoad(GpuInfo info)
+    private static bool TryDebugfsLoad(GpuInfo info)
     {
-        if (info.DeviceId == null || !int.TryParse(info.DeviceId.AsSpan(4), out int index)) return;
-
-        // Try amdgpu first (amdgpu driver)
-        string amdgpuPath = $"/sys/kernel/debug/dri/{index}/amdgpu_pm_info";
-        if (File.Exists(amdgpuPath))
+        if (info.DeviceId == null || !int.TryParse(info.DeviceId.AsSpan(4), out int index)) return false;
+        string[] paths =
         {
-            foreach (var line in File.ReadAllLines(amdgpuPath))
+            $"/sys/kernel/debug/dri/{index}/amdgpu_pm_info",
+            $"/sys/kernel/debug/dri/{index}/radeon_pm_info"
+        };
+        foreach (string path in paths)
+        {
+            if (!File.Exists(path)) continue;
+            foreach (string line in File.ReadAllLines(path))
             {
-                if (!line.Contains("GPU Load", StringComparison.OrdinalIgnoreCase)) continue;
-                var tokens = line.Split(new[] { ':', '%', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var token in tokens)
+                if (!line.Contains("GPU Load", StringComparison.OrdinalIgnoreCase)
+                    && !line.Contains("GPU load", StringComparison.Ordinal)) continue;
+                foreach (string token in line.Split(new[] { ':', '%', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    if (double.TryParse(token.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double v)
-                        && v >= 0 && v <= 100)
+                    if (double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out double v)
+                        && v is >= 0 and <= 100)
                     {
                         info.Utilization = v;
-                        return;
+                        info.UtilizationText = null;
+                        return true;
                     }
                 }
             }
+            // File exists but radeon_pm_info on Kaveri usually has clocks only, no load line.
+            info.UtilizationText = $"{Path.GetFileName(path)} has no GPU load counter";
+            return true;
         }
+        return false;
+    }
 
-        // Try radeon driver (radeon driver on older AMD GPUs like Kaveri)
-        string radeonPath = $"/sys/kernel/debug/dri/{index}/radeon_pm_info";
-        if (File.Exists(radeonPath))
-        {
-            foreach (var line in File.ReadAllLines(radeonPath))
-            {
-                if (line.Contains("GPU Load", StringComparison.OrdinalIgnoreCase) ||
-                    line.Contains("usage", StringComparison.OrdinalIgnoreCase))
-                {
-                    var tokens = line.Split(new[] { ':', '%', '\t', ' ', '=' }, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var token in tokens)
-                    {
-                        if (double.TryParse(token.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double v)
-                            && v >= 0 && v <= 100)
-                        {
-                            info.Utilization = v;
-                            break;
-                        }
-                    }
-                }
-                else if (line.Contains("temp", StringComparison.OrdinalIgnoreCase) && info.TemperatureC == null)
-                {
-                    var tokens = line.Split(new[] { ':', '=', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var token in tokens)
-                    {
-                        if (double.TryParse(token.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double t)
-                            && t > 0 && t < 200)
-                        {
-                            info.TemperatureC = t;
-                            info.TemperatureText = $"{t:F1} °C";
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+    private static string DebugfsReason(GpuInfo info, string device)
+    {
+        string driver = ReadDriverName(device) ?? "this";
+        if (!Directory.Exists("/sys/kernel/debug") || !Directory.EnumerateFileSystemEntries("/sys/kernel/debug").Any())
+            return "Requires debugfs mount for " + driver + " utilization (sudo mount -t debugfs none /sys/kernel/debug)";
+        return driver == "radeon"
+            ? "Requires readable /sys/kernel/debug/dri/*/radeon_pm_info (debugfs is root-only by default)"
+            : $"Utilization not exposed by the {driver} driver";
+    }
+
+    private static string? ReadDriverName(string device)
+    {
+        try { return Directory.ResolveLinkTarget(Path.Combine(device, "driver"), true)?.Name; }
+        catch { return null; }
     }
 
     private readonly record struct LspciGpu(string Slot, string Name);
