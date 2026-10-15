@@ -198,6 +198,9 @@ public sealed class LinuxCpuProvider : CpuProviderBase
 
             // CPU temperature from hwmon (k10temp for AMD, coretemp for Intel)
             s.TemperatureText = ReadCpuTemperature();
+
+            // Linux PSI: CPU stall pressure (kernel >= 4.20 with CONFIG_PSI).
+            s.PressureText = LinuxPressure.Cpu();
         }
         catch
         {

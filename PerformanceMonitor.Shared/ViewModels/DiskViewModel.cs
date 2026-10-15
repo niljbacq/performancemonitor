@@ -51,6 +51,7 @@ public partial class DiskViewModel : ViewModelBase
     [ObservableProperty] private string? _freeText;
     [ObservableProperty] private string? _appsAndDataText;
     [ObservableProperty] private string? _systemReservedText;
+    [ObservableProperty] private string? _ioPressureText;
 
     // ---- SSD / HDD split ----
     public DiskSubViewModel Ssd { get; } = new DiskSubViewModel("SSD", "No SSD detected");
@@ -96,6 +97,7 @@ public partial class DiskViewModel : ViewModelBase
         FreeText = s.FreeText;
         AppsAndDataText = s.AppsAndDataText;
         SystemReservedText = s.SystemReservedText;
+        IoPressureText = s.PressureText;
 
         var info = new DiskInfo
         {
@@ -146,6 +148,7 @@ public partial class DiskViewModel : ViewModelBase
             FreeText = primary.FreeText;
             AppsAndDataText = primary.AppsAndDataText;
             SystemReservedText = primary.SystemReservedText;
+            IoPressureText = primary.PressureText;
         }
     }
 

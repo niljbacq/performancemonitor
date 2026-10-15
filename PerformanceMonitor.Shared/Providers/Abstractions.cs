@@ -24,6 +24,8 @@ public sealed class CpuSpecs
     public string? SupportedAbis { get; set; }
     public string? ClusterText { get; set; }
     public string? TemperatureText { get; set; }
+    // Linux Pressure Stall Information for the CPU ("some 0.42% (10s avg)").
+    public string? PressureText { get; set; }
 }
 
 public sealed record ProcessStats(int Processes, int Threads, string Handles);
@@ -60,6 +62,8 @@ public sealed class DiskSpecs
     public string? FreeText { get; set; }
     public string? AppsAndDataText { get; set; }
     public string? SystemReservedText { get; set; }
+    // Linux I/O Pressure Stall Information (global, not per-disk).
+    public string? PressureText { get; set; }
 }
 
 public sealed class DiskSample
@@ -80,6 +84,8 @@ public sealed record MemoryUsage(double TotalGB, double UsedGB, double Percent)
     public string? ActiveText { get; init; }
     public string? InactiveText { get; init; }
     public string? SlabText { get; init; }
+    // Linux memory Pressure Stall Information ("some 1.20% (10s avg), full 0.30%").
+    public string? PressureText { get; init; }
 }
 
 // ---- Interfaces ----
@@ -161,6 +167,8 @@ public sealed class DiskInfo
     public double? ResponseMs { get; set; }
     public bool NotSupported { get; set; }
     public string? NotSupportedMessage { get; set; }
+    // Linux I/O pressure (global, repeated on each disk for convenience).
+    public string? PressureText { get; set; }
 }
 
 public interface IWifiProvider

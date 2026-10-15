@@ -170,7 +170,8 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
             UsedText = primary.UsedText,
             FreeText = primary.FreeText,
             AppsAndDataText = primary.AppsAndDataText,
-            SystemReservedText = primary.SystemReservedText
+            SystemReservedText = primary.SystemReservedText,
+            PressureText = primary.PressureText
         };
     }
 
@@ -233,7 +234,8 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
         UsedText = src.UsedText,
         FreeText = src.FreeText,
         AppsAndDataText = src.AppsAndDataText,
-        SystemReservedText = src.SystemReservedText
+        SystemReservedText = src.SystemReservedText,
+        PressureText = src.PressureText
     };
 
     private List<DiskInfo> BuildDiskList()
@@ -241,6 +243,7 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
         var result = new List<DiskInfo>();
         string? systemDev = FindSystemBlockDevice();
         var swapDevices = ReadSwapDevices();   // /proc/swaps -> set of backing device names
+        string? ioPressure = LinuxPressure.Io();
 
         try
         {
@@ -276,7 +279,8 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
                     SystemDisk = dev == systemDev ? "Yes" : "No",
                     PageFile = HasSwapOnDevice(swapDevices, dev) ? "Yes" : "No",
                     UsedText = GetUsedText(dev),
-                    FreeText = GetFreeText(dev)
+                    FreeText = GetFreeText(dev),
+                    PressureText = ioPressure
                 });
             }
         }

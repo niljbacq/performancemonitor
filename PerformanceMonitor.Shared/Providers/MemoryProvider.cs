@@ -73,7 +73,8 @@ public sealed class LinuxMemoryProvider : IMemoryProvider
             SwapText = FormatSwap(kb, zram),
             ActiveText = FormatGb(kb, "Active"),
             InactiveText = FormatGb(kb, "Inactive"),
-            SlabText = FormatGb(kb, "Slab")
+            SlabText = FormatGb(kb, "Slab"),
+            PressureText = LinuxPressure.Memory()
         };
     }
 

@@ -27,6 +27,7 @@ public partial class MemoryViewModel : ViewModelBase
     [ObservableProperty] private string? _activeText;
     [ObservableProperty] private string? _inactiveText;
     [ObservableProperty] private string? _slabText;
+    [ObservableProperty] private string? _pressureText;
 
     public MemoryViewModel() : this(ProviderFactory.CreateMemory()) { }
 
@@ -57,6 +58,7 @@ public partial class MemoryViewModel : ViewModelBase
                     ActiveText = m.ActiveText;
                     InactiveText = m.InactiveText;
                     SlabText = m.SlabText;
+                    PressureText = m.PressureText;
                 });
             }
             catch { }

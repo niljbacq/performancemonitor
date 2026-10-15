@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
+using System.Text.RegularExpressions;
 
 namespace TaskManager.Providers;
 
@@ -759,7 +760,13 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         if (TryReadDouble(busyPath, out double busy))
             info.Utilization = busy;
         else if (!TryDebugfsLoad(info))
-            info.UtilizationText = DebugfsReason(info, device);
+        {
+            // No amdgpu-style counter and no debugfs pm_info file. As a last
+            // resort ask radeontop, which reads the GPU busy register over DRM
+            // and needs neither debugfs nor root.
+            if (!TryRadeontopUtilization(info))
+                info.UtilizationText = DebugfsReason(info, device);
+        }
 
         if (TryReadTempC(device, out double temp))
             info.TemperatureC = temp;
@@ -820,6 +827,38 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
             return true;
         }
         return false;
+    }
+
+    private static bool? _radeontopAvailable;
+
+    // Last-resort utilization for radeon: radeontop reads the GPU busy register
+    // over DRM, so it works without debugfs/root. It is a separate binary, so we
+    // remember when it is missing to avoid respawning it every sample.
+    private static bool TryRadeontopUtilization(GpuInfo info)
+    {
+        if (_radeontopAvailable == false) return false;
+
+        string raw = CommandRunner.Run("radeontop", "-d - -l 1", 2500);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            _radeontopAvailable = false;
+            return false;
+        }
+        _radeontopAvailable = true;
+
+        // Dump mode ("-d -") writes "gpu 12.34%"; the interactive line is
+        // "720.06MHz, 12.34% GPU, ...". Accept either.
+        var m = Regex.Match(raw, @"gpu\s+(\d+(?:\.\d+)?)\s*%", RegexOptions.IgnoreCase);
+        if (!m.Success)
+            m = Regex.Match(raw, @"(\d+(?:\.\d+)?)\s*%\s*GPU", RegexOptions.IgnoreCase);
+        if (!m.Success) return false;
+        if (!double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double pct))
+            return false;
+
+        double p = Math.Clamp(pct, 0, 100);
+        info.Utilization = p;
+        info.UtilizationText = $"{Math.Round(p, 1)}% (radeontop)";
+        return true;
     }
 
     private static void ReadRadeonClocks(string path, GpuInfo info)

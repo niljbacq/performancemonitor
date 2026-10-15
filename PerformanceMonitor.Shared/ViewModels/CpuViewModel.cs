@@ -64,6 +64,7 @@ public partial class CpuViewModel : ViewModelBase
     [ObservableProperty] private string? _clusterText;
     [ObservableProperty] private string? _perCoreFrequencyText;
     [ObservableProperty] private string? _temperatureText;
+    [ObservableProperty] private string? _pressureText;
 
     private readonly ICpuProvider _provider;
 
@@ -97,6 +98,7 @@ public partial class CpuViewModel : ViewModelBase
         CpuGovernor = s.CpuGovernor;
         SupportedAbis = s.SupportedAbis;
         ClusterText = s.ClusterText;
+        PressureText = s.PressureText;
     }
 
     private async Task StartMonitoringAsync()

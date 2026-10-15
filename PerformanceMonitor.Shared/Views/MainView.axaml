@@ -164,6 +164,10 @@
                                 <TextBlock Text="Slab (kernel)" Foreground="#888888"/>
                                 <TextBlock Text="{Binding SlabText}" Foreground="White" HorizontalAlignment="Right"/>
                             </DockPanel>
+                            <DockPanel IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="Pressure (PSI)" Foreground="#888888"/>
+                                <TextBlock Text="{Binding PressureText}" Foreground="White" HorizontalAlignment="Right"/>
+                            </DockPanel>
                         </StackPanel>
 
                         <UniformGrid Grid.Row="3" Columns="2" Rows="2" VerticalAlignment="Top">
@@ -262,7 +266,10 @@
                                     <TextBlock Text="L1 cache:" Foreground="#888888"/>
                                     <TextBlock Text="L2 cache:" Foreground="#888888"/>
                                     <TextBlock Text="L3 cache:" Foreground="#888888"/>
-                                    <TextBlock Text="Temperature:" Foreground="#888888"/>
+                                    <TextBlock Text="Temperature:" Foreground="#888888"
+                                               IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="Pressure (PSI):" Foreground="#888888"
+                                               IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Spacing="4">
@@ -276,6 +283,8 @@
                                     <TextBlock Text="{Binding L3Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding TemperatureText}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
                                                IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="{Binding PressureText}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 </StackPanel>
                             </Grid>
                         </Grid>
@@ -286,9 +295,14 @@
                                 <!-- Disk View Template (SSD / HDD split) -->
                 <DataTemplate DataType="{x:Type vm:DiskViewModel}">
                     <Grid RowDefinitions="Auto, *" Margin="20">
-                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
-                            <TextBlock Grid.Column="0" Text="Disk" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
-                            <TextBlock Grid.Column="1" Text="{Binding ModelName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        <Grid Grid.Row="0" RowDefinitions="Auto, Auto" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Disk" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ModelName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0"
+                                        IsVisible="{Binding IoPressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <TextBlock Text="I/O pressure (PSI): " FontSize="12" Foreground="#888888"/>
+                                <TextBlock Text="{Binding IoPressureText}" FontSize="12" Foreground="#CCCCCC"/>
+                            </StackPanel>
                         </Grid>
 
                         <Grid Grid.Row="1" ColumnDefinitions="*, *">
@@ -750,6 +764,8 @@
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Sockets"/><TextBlock Classes="mValue" Text="{Binding Sockets}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Virtualization"/><TextBlock Classes="mValue" Text="{Binding Virtualization}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Uptime"/><TextBlock Classes="mValue" Text="{Binding Uptime}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding TemperatureText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Pressure (PSI)"/><TextBlock Classes="mValue" Text="{Binding PressureText}"/></DockPanel>
 <TextBlock Classes="mLabel" Margin="0,8,0,0" Text="Android details"
            IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 <DockPanel Classes="mRow" IsVisible="{Binding FrequencyMinText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Min frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMinText}"/></DockPanel>
@@ -794,6 +810,7 @@
 <DockPanel Classes="mRow" IsVisible="{Binding ActiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Active"/><TextBlock Classes="mValue" Text="{Binding ActiveText}"/></DockPanel>
 <DockPanel Classes="mRow" IsVisible="{Binding InactiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Inactive"/><TextBlock Classes="mValue" Text="{Binding InactiveText}"/></DockPanel>
 <DockPanel Classes="mRow" IsVisible="{Binding SlabText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Slab (kernel)"/><TextBlock Classes="mValue" Text="{Binding SlabText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Pressure (PSI)"/><TextBlock Classes="mValue" Text="{Binding PressureText}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -806,6 +823,13 @@
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
                             <TextBlock Classes="mTitle" Text="Disk"/>
+
+                            <Border Classes="mCard" IsVisible="{Binding IoPressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <DockPanel>
+                                    <TextBlock Classes="mLabel" Text="I/O pressure (PSI)"/>
+                                    <TextBlock Classes="mValue" Text="{Binding IoPressureText}"/>
+                                </DockPanel>
+                            </Border>
 
                             <Border Classes="mCard">
                                 <StackPanel Spacing="8">
