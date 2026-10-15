@@ -1,6 +1,7 @@
 ﻿using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using TaskManager.Providers;
 using TaskManager.ViewModels;
 using TaskManager.Views;
 
@@ -15,6 +16,9 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // One background sampler owns the CSV log for the whole process.
+        try { SamplingService.StartDefault(); } catch { }
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow

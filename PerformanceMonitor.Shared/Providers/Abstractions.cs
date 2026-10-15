@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 
 namespace TaskManager.Providers;
 
@@ -257,6 +258,10 @@ public static class ProviderFactory
     public static Func<IMemoryProvider>? MemoryFactory { get; set; }
     public static Func<ISystemInfoProvider>? SystemFactory { get; set; }
 
+    // Where CSV samples are written. Android points this at its external files
+    // dir (no permission needed); everyone else gets LocalApplicationData.
+    public static Func<string?>? LogDirectoryFactory { get; set; }
+
     public static ICpuProvider CreateCpu()
     {
         if (CpuFactory != null) return CpuFactory();
@@ -304,4 +309,20 @@ public static class ProviderFactory
 
     public static ISystemInfoProvider CreateSystem()
         => SystemFactory?.Invoke() ?? new CrossPlatformSystemInfoProvider();
+
+    public static string LogDirectory()
+    {
+        if (LogDirectoryFactory != null)
+        {
+            try
+            {
+                string? custom = LogDirectoryFactory();
+                if (!string.IsNullOrWhiteSpace(custom)) return custom;
+            }
+            catch { }
+        }
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PerformanceMonitor");
+    }
 }
