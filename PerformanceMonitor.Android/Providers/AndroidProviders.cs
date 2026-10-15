@@ -846,7 +846,11 @@ public sealed class AndroidSystemInfoProvider : CrossPlatformSystemInfoProvider
         info.AndroidBoard = Safe(() => Android.OS.Build.Board);
 
         if (OperatingSystem.IsAndroidVersionAtLeast(31))
+        {
+#pragma warning disable CA1416 // guarded by the runtime API-level check above
             info.SocModel = Safe(() => Android.OS.Build.SocModel);
+#pragma warning restore CA1416
+        }
 
         // Android is Linux under the hood; it has no distro PRETTY_NAME, so drop
         // the Linux-only distro row and keep the kernel (which is still useful).

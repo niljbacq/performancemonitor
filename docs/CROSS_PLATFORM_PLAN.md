@@ -173,3 +173,60 @@ DOTNET_ROLL_FORWARD=Major /home/neil/dotnet10/dotnet run --project PerformanceMo
 adb install -r <path-to-apk-from-build-output>
 ```
 Nothing in this plan is committed; all changes stay in the working tree on `fix/cross-platform-hardware` until you review.
+
+---
+
+## 9. Round-2 enhancements (from the Claude review)
+
+### Linux
+
+| Feature | Where | Notes / verification |
+|---|---|---|
+| CPU temperature | `LinuxCpuProvider.ReadCpuTemperature` | hwmon `k10temp` (AMD) / `coretemp` (Intel) / `fam15h_power`; also prints `fam15h_power` watts. Verify: `grep -H . /sys/class/hwmon/hwmon*/name` |
+| ZRAM | `LinuxMemoryProvider.FormatSwap` | reads `/sys/block/zram*/mm_stat` (columns: orig, compr, mem_used); the old per-file `orig_data_size` no longer exists on newer kernels. Verify: `cat /sys/block/zram0/mm_stat; zramctl` |
+| PSI pressure | `LinuxPressure` → CPU/Memory/Disk rows | `/proc/pressure/{cpu,memory,io}`. Verify: `cat /proc/pressure/cpu` |
+| GPU utilization, no debugfs | `LinuxGpuProvider.TryRadeontopUtilization` | last resort: `radeontop -d - -l 1` (reads the GPU busy register over DRM; no root/debugfs). Honest reason string when radeontop is absent. |
+| Frequency residency | `LinuxCpuProvider.FrequencyResidencyText` | cpufreq `time_in_state`, top-3 P-states. Verify: `cat /sys/devices/system/cpu/cpu0/cpufreq/stats/time_in_state` |
+
+**radeon busy register / debugfs:** udev cannot chmod debugfs nodes (they are created dynamically). Keep the documented manual step in the honest string: `sudo mount -t debugfs none /sys/kernel/debug`, then read `.../dri/*/radeon_pm_info`. Kernel lockdown can block debugfs entirely.
+
+**Optional: try amdgpu on Kaveri (test, not required).** Kaveri (CIK) can run `amdgpu` instead of `radeon`. Add to the kernel command line and reboot:
+```
+amdgpu.cik_support=1 radeon.cik_support=0
+```
+Then `gpu_busy_percent`, `mem_info_vram_*` and `pp_dpm_sclk` appear and the existing amdgpu code paths light up with no new code. Revert by removing the parameters.
+
+### Android
+
+| Feature | Where | Notes / verification |
+|---|---|---|
+| Thermal fallbacks | `AndroidGpuProvider.ReadFallbackThermal` | battery temperature (sticky `ACTION_BATTERY_CHANGED`), `PowerManager.GetThermalHeadroom` (API 30+), `CurrentThermalStatus` (API 29+). GPU zone match broadened to gpu/g3d/gpuss/mali/kgsl. |
+| Frequency residency | `AndroidCpuProvider.FrequencyResidencyText` | `cpufreq/stats/time_in_state`. Verify: `adb shell cat /sys/devices/system/cpu/cpu0/cpufreq/stats/time_in_state` |
+| Own-app CPU | `AndroidCpuProvider.AppUsageText` | `/proc/self/stat` utime+stime delta, shown as % of one core. |
+| Foreground service | `MonitorForegroundService` + manifest | type `specialUse` (no 6-hour `dataSync` timeout), channel + `POST_NOTIFICATIONS` runtime request. Verify: `adb shell dumpsys activity services com.performancemonitor.app` |
+
+For Google Play submission, add the special-use subtype property to the service element:
+`<property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="hardware performance monitoring"/>`.
+
+### Windows
+
+| Feature | Where | Notes |
+|---|---|---|
+| Any-vendor GPU memory | `WindowsGpuProvider.SampleAdapterMemoryByPhys` | `GPU Adapter Memory` counters (`Dedicated Usage` / `Shared Usage`), grouped by `phys_N`. Verify: `Get-Counter '\GPU Adapter Memory(*)\Dedicated Usage'` |
+| Total VRAM > 4 GB | `ReadDisplayAdapterTotalBytes` | registry `HardwareInformation.qwMemorySize` (64-bit REG_BINARY), matched by `MatchingDeviceId`. Avoids `AdapterRAM`'s uint32 cap. |
+
+### Cross-platform
+
+- **System Details page** (`SystemInfoProvider` / `SystemViewModel`): OS, arch, process arch, .NET runtime, Avalonia version, kernel, distro, machine name, processor count; Android adds manufacturer/model/hardware/board/SoC/API level.
+- **SamplingService + CSV** (`SamplingService`): one background loop samples all providers every 2 s and writes UTC ISO-8601 CSV (`null` → empty cell), flushed every ~5 s. Log dir: `LocalApplicationData/PerformanceMonitor` on desktop, `GetExternalFilesDir(null)` on Android.
+
+### Round-2 commands
+
+```
+cd '/home/neil/Documents/performance monitor/performancemonitor'
+/home/neil/dotnet10/dotnet build -c Debug
+DOTNET_ROLL_FORWARD=Major /home/neil/dotnet10/dotnet run --project PerformanceMonitor.Desktop -c Debug --no-build
+/home/neil/dotnet10/dotnet build PerformanceMonitor.Android -c Debug -f net10.0-android
+adb install -r PerformanceMonitor.Android/bin/Debug/net10.0-android/com.performancemonitor.app-Signed.apk
+```
+
