@@ -107,7 +107,34 @@ public sealed class LinuxMemoryProvider : IMemoryProvider
             return "Swap unreadable (/proc/meminfo)";
         if (total == 0) return "Not in use";
         double used = total - free;
-        string kind = zram ? "zram" : "swap";
-        return $"{used / 1024 / 1024:F2} GB / {total / 1024.0 / 1024:F2} GB ({used / total * 100:F0}%) {kind}";
+        string baseText = $"{used / 1024 / 1024:F2} GB / {total / 1024.0 / 1024:F2} GB ({used / total * 100:F0}%)";
+
+        if (!zram) return baseText + " swap";
+
+        // ZRAM: read /sys/block/zram*/mm_stat for orig_data_size, compr_data_size, mem_used_total
+        // mm_stat columns: orig_data_size, compr_data_size, mem_used_total, mem_limit, max_used, ...
+        string? zramDetail = null;
+        try
+        {
+            foreach (var zramDir in Directory.GetDirectories("/sys/block", "zram*"))
+            {
+                string mmStatPath = Path.Combine(zramDir, "mm_stat");
+                if (!File.Exists(mmStatPath)) continue;
+                string line = File.ReadAllText(mmStatPath).Trim();
+                string[] cols = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (cols.Length >= 3 &&
+                    long.TryParse(cols[0], out long orig) &&
+                    long.TryParse(cols[1], out long compr) &&
+                    long.TryParse(cols[2], out long memUsed))
+                {
+                    double ratio = orig > 0 ? (double)compr / orig * 100 : 0;
+                    zramDetail = $", ZRAM: {orig / 1024.0 / 1024:F1} MB → {compr / 1024.0 / 1024:F1} MB ({ratio:F0}%), {memUsed / 1024.0 / 1024:F1} MB used";
+                    break;
+                }
+            }
+        }
+        catch { }
+
+        return baseText + (zramDetail ?? " zram") + " zram";
     }
 }

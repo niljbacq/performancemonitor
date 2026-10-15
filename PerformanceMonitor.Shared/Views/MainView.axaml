@@ -262,6 +262,7 @@
                                     <TextBlock Text="L1 cache:" Foreground="#888888"/>
                                     <TextBlock Text="L2 cache:" Foreground="#888888"/>
                                     <TextBlock Text="L3 cache:" Foreground="#888888"/>
+                                    <TextBlock Text="Temperature:" Foreground="#888888"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Spacing="4">
@@ -273,6 +274,8 @@
                                     <TextBlock Text="{Binding L1Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding L2Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding L3Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding TemperatureText}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 </StackPanel>
                             </Grid>
                         </Grid>

@@ -23,6 +23,7 @@ public sealed class CpuSpecs
     public string? CpuGovernor { get; set; }
     public string? SupportedAbis { get; set; }
     public string? ClusterText { get; set; }
+    public string? TemperatureText { get; set; }
 }
 
 public sealed record ProcessStats(int Processes, int Threads, string Handles);

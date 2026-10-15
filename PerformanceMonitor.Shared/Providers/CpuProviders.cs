@@ -195,6 +195,9 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                     }
                 }
             }
+
+            // CPU temperature from hwmon (k10temp for AMD, coretemp for Intel)
+            s.TemperatureText = ReadCpuTemperature();
         }
         catch
         {
@@ -202,6 +205,52 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         }
         s.Name ??= "Linux Processor";
         return s;
+    }
+
+    // Read CPU temperature from hwmon (k10temp for AMD, coretemp for Intel)
+    private static string? ReadCpuTemperature()
+    {
+        try
+        {
+            string hwmonRoot = "/sys/class/hwmon";
+            if (!Directory.Exists(hwmonRoot)) return null;
+
+            foreach (var hwmonDir in Directory.GetDirectories(hwmonRoot))
+            {
+                string namePath = Path.Combine(hwmonDir, "name");
+                if (!File.Exists(namePath)) continue;
+                
+                string name = File.ReadAllText(namePath).Trim();
+                // k10temp = AMD Family 15h/16h/17h (Kaveri, etc.)
+                // coretemp = Intel Core
+                // fam15h_power = AMD Family 15h power (also has temp)
+                if (name is not ("k10temp" or "coretemp" or "fam15h_power")) continue;
+
+                foreach (var tempFile in Directory.GetFiles(hwmonDir, "temp*_input"))
+                {
+                    if (long.TryParse(File.ReadAllText(tempFile).Trim(), out long milliC))
+                    {
+                        double celsius = milliC / 1000.0;
+                        if (celsius > -20 && celsius < 150) // sanity check
+                        {
+                            // fam15h_power also has power1_input in µW
+                            string? power = null;
+                            if (name == "fam15h_power")
+                            {
+                                string powerPath = Path.Combine(hwmonDir, "power1_input");
+                                if (File.Exists(powerPath) && long.TryParse(File.ReadAllText(powerPath).Trim(), out long microwatts))
+                                {
+                                    power = $", {microwatts / 1_000_000.0:F1} W";
+                                }
+                            }
+                            return $"{celsius:F1} °C{power}";
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return null;
     }
 
     public override float GetUsagePercent()

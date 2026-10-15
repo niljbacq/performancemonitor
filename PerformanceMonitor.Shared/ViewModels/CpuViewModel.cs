@@ -63,6 +63,7 @@ public partial class CpuViewModel : ViewModelBase
     [ObservableProperty] private string? _supportedAbis;
     [ObservableProperty] private string? _clusterText;
     [ObservableProperty] private string? _perCoreFrequencyText;
+    [ObservableProperty] private string? _temperatureText;
 
     private readonly ICpuProvider _provider;
 
@@ -89,6 +90,7 @@ public partial class CpuViewModel : ViewModelBase
         if (s.L1Cache != null) L1Cache = s.L1Cache;
         if (s.L2Cache != null) L2Cache = s.L2Cache;
         if (s.L3Cache != null) L3Cache = s.L3Cache;
+        if (s.TemperatureText != null) TemperatureText = s.TemperatureText;
 
         FrequencyMinText = s.FrequencyMinText;
         FrequencyMaxText = s.FrequencyMaxText;

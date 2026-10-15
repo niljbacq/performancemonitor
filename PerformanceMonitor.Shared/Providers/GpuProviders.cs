@@ -788,6 +788,7 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         foreach (string path in paths)
         {
             if (!File.Exists(path)) continue;
+            bool foundLoad = false;
             foreach (string line in File.ReadAllLines(path))
             {
                 if (!line.Contains("GPU Load", StringComparison.OrdinalIgnoreCase)
@@ -799,15 +800,54 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                     {
                         info.Utilization = v;
                         info.UtilizationText = null;
-                        return true;
+                        foundLoad = true;
+                        break;
                     }
                 }
+                if (foundLoad) break;
             }
-            // File exists but radeon_pm_info on Kaveri usually has clocks only, no load line.
-            info.UtilizationText = $"{Path.GetFileName(path)} has no GPU load counter";
+
+            // radeon_pm_info on Kaveri has sclk/mclk lines — read them as an honest clock row
+            if (!foundLoad && path.Contains("radeon_pm_info"))
+            {
+                ReadRadeonClocks(path, info);
+            }
+
+            if (!foundLoad)
+            {
+                info.UtilizationText = $"{Path.GetFileName(path)} has no GPU load counter";
+            }
             return true;
         }
         return false;
+    }
+
+    private static void ReadRadeonClocks(string path, GpuInfo info)
+    {
+        try
+        {
+            long? sclk = null, mclk = null;
+            foreach (string line in File.ReadAllLines(path))
+            {
+                // sclk: 72000 kHz (or similar format)
+                // mclk: 80000 kHz
+                string[] parts = line.Split(new[] { ':', '=', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                for (int i = 0; i < parts.Length - 1; i++)
+                {
+                    if (parts[i].Equals("sclk", StringComparison.OrdinalIgnoreCase) &&
+                        long.TryParse(parts[i + 1], out long s))
+                        sclk = s;
+                    else if (parts[i].Equals("mclk", StringComparison.OrdinalIgnoreCase) &&
+                        long.TryParse(parts[i + 1], out long m))
+                        mclk = m;
+                }
+            }
+            if (sclk.HasValue || mclk.HasValue)
+            {
+                info.UtilizationText = $"GPU clock: {(sclk ?? 0) / 1000} / {(mclk ?? 0) / 1000} MHz";
+            }
+        }
+        catch { }
     }
 
     private static string DebugfsReason(GpuInfo info, string device)

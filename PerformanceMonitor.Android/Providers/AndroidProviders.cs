@@ -308,12 +308,16 @@ public sealed class AndroidDiskProvider : IDiskProvider
         bool fromStorageStats = false;
         try
         {
-            var ssm = Application.Context.GetSystemService(Context.StorageStatsService)
-                      as Android.App.Usage.StorageStatsManager;
-            if (ssm != null)
+            if (OperatingSystem.IsAndroidVersionAtLeast(26))
             {
-                total = ssm.GetTotalBytes(Android.OS.Storage.StorageManager.UuidDefault);
-                fromStorageStats = true;
+                var ssm = Application.Context.GetSystemService(Context.StorageStatsService)
+                          as Android.App.Usage.StorageStatsManager;
+                var uuid = Android.OS.Storage.StorageManager.UuidDefault;
+                if (ssm != null && uuid != null)
+                {
+                    total = ssm.GetTotalBytes(uuid);
+                    fromStorageStats = true;
+                }
             }
         }
         catch { }
