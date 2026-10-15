@@ -60,6 +60,9 @@ public sealed class AndroidCpuProvider : ICpuProvider
     private ulong _prevTotal;
     private bool _primed;
     private string? _usageNote;
+    private long _prevAppTicks;
+    private DateTime _prevAppUtc;
+    private bool _haveAppBaseline;
     private readonly int[] _cores = FindCores();
 
     public long UptimeMilliseconds => Android.OS.SystemClock.ElapsedRealtime();
@@ -128,6 +131,89 @@ public sealed class AndroidCpuProvider : ICpuProvider
             }
             return any ? string.Join(", ", parts) + " MHz" : Fmt.NA;
         }
+    }
+
+    // Distribution of time each core spent at each P-state. Readable on many
+    // MediaTek/Qualcomm devices via cpufreq "time_in_state"; null when hidden.
+    public string? FrequencyResidencyText
+    {
+        get
+        {
+            try
+            {
+                var totals = new SortedDictionary<long, long>();
+                foreach (int core in _cores)
+                {
+                    string path = $"{CpuRoot}/cpu{core}/cpufreq/stats/time_in_state";
+                    if (!File.Exists(path)) continue;
+                    foreach (string line in File.ReadLines(path))
+                    {
+                        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length < 2) continue;
+                        if (!long.TryParse(parts[0], out long khz)) continue;
+                        if (!long.TryParse(parts[1], out long ticks)) continue;
+                        totals[khz] = totals.TryGetValue(khz, out long t) ? t + ticks : ticks;
+                    }
+                }
+                if (totals.Count == 0) return null;
+                long grand = 0;
+                foreach (var kv in totals) grand += kv.Value;
+                if (grand <= 0) return null;
+                var top = totals.OrderByDescending(kv => kv.Value).Take(3)
+                    .Where(kv => kv.Value > 0)
+                    .Select(kv => $"{kv.Key / 1000} MHz {kv.Value * 100.0 / grand:F0}%");
+                string text = string.Join(", ", top);
+                return text.Length == 0 ? null : text;
+            }
+            catch { return null; }
+        }
+    }
+
+    // This app's own CPU usage from /proc/self/stat (utime+stime delta).
+    public string? AppUsageText
+    {
+        get
+        {
+            long? ticks = ReadSelfCpuTicks();
+            if (ticks is not long now) return null;
+
+            DateTime utc = DateTime.UtcNow;
+            if (!_haveAppBaseline)
+            {
+                _prevAppTicks = now;
+                _prevAppUtc = utc;
+                _haveAppBaseline = true;
+                return null;
+            }
+
+            double elapsed = (utc - _prevAppUtc).TotalSeconds;
+            long delta = now - _prevAppTicks;
+            _prevAppTicks = now;
+            _prevAppUtc = utc;
+            if (elapsed <= 0 || delta < 0) return null;
+
+            // _SC_CLK_TCK is 100 on Android/Linux, so ticks/100 = CPU-seconds.
+            double cpuPct = delta / 100.0 / elapsed * 100.0;
+            return $"{cpuPct:F1}% of one core";
+        }
+    }
+
+    private static long? ReadSelfCpuTicks()
+    {
+        try
+        {
+            string stat = File.ReadAllText("/proc/self/stat");
+            // Field 2 (comm) is parenthesised and may contain spaces; everything
+            // after the final ')' is space-delimited starting with the state.
+            int close = stat.LastIndexOf(')');
+            if (close < 0) return null;
+            string[] f = stat[(close + 2)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (f.Length < 13) return null;      // state(0) .. utime(11), stime(12)
+            if (!long.TryParse(f[11], out long utime) || !long.TryParse(f[12], out long stime))
+                return null;
+            return utime + stime;
+        }
+        catch { return null; }
     }
 
     public float GetUsagePercent()
@@ -470,17 +556,11 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
             info.UtilizationText = "No public GPU utilization HAL";
             info.MemoryUsage = "GPU memory not exposed";
 
-            // Best-effort thermal: many SoCs expose the GPU temperature via a
-            // thermal-zone symlink. Unreadable paths simply stay "Not available".
-            string? temp = ReadGpuTemperature();
-            if (temp != null)
-            {
-                info.TemperatureText = temp;
-            }
-            else
-            {
-                info.TemperatureText = "No gpu/mtktsgpu thermal zone";
-            }
+            // Best-effort thermal. Prefer a GPU-specific thermal zone; when none
+            // is readable fall back to honest device-level signals (battery
+            // temperature / thermal headroom / thermal status).
+            string? temp = ReadGpuTemperature() ?? ReadFallbackThermal();
+            info.TemperatureText = temp ?? "No gpu/mtktsgpu thermal zone";
 
             list.Add(info);
         }
@@ -496,10 +576,7 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
             foreach (string zone in Directory.GetDirectories(root, "thermal_zone*"))
             {
                 string? type = Fmt.ReadText(Path.Combine(zone, "type"));
-                if (type == null) continue;
-                if (type.IndexOf("gpu", StringComparison.OrdinalIgnoreCase) < 0
-                    && !type.StartsWith("mtktsgpu", StringComparison.OrdinalIgnoreCase))
-                    continue;
+                if (type == null || !IsGpuZone(type)) continue;
                 long? raw = Fmt.ReadLong(Path.Combine(zone, "temp"));
                 if (raw == null) continue;
                 double c = raw > 1000 ? raw.Value / 1000.0 : raw.Value; // millidegrees, or already °C
@@ -509,6 +586,69 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
         }
         catch { return null; }
     }
+
+    // Match by case-insensitive substring on the zone type. SoC vendors use many
+    // names (mtktsgpu, gpu, gpu0, gpuss-0, mali, kgsl, g3d, ...).
+    private static bool IsGpuZone(string type)
+    {
+        string t = type.ToLowerInvariant();
+        return t.Contains("gpu") || t.Contains("g3d") || t.Contains("gpuss")
+            || t.Contains("mali") || t.Contains("kgsl");
+    }
+
+    // Device-level thermal fallbacks when no GPU zone is readable. Both of these
+    // are public APIs: no root, no hidden SELinux state.
+    private static string? ReadFallbackThermal()
+    {
+        // 1) Battery temperature (tenths of °C) — always available, no permission.
+        try
+        {
+            var filter = new IntentFilter(Intent.ActionBatteryChanged);
+            var battery = Application.Context.RegisterReceiver(null, filter);
+            int tenths = battery?.GetIntExtra(Android.OS.BatteryManager.ExtraTemperature, int.MinValue) ?? int.MinValue;
+            if (tenths != int.MinValue && tenths > 0)
+                return $"{tenths / 10.0:F1} °C (battery)";
+        }
+        catch { }
+
+        // 2) Thermal headroom (API 30+): <= 0 means the SoC is at its throttle limit.
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(30)
+                && Application.Context.GetSystemService(Context.PowerService) is Android.OS.PowerManager pm)
+            {
+                float headroom = pm.GetThermalHeadroom(0);
+                if (!float.IsNaN(headroom))
+                    return $"Thermal headroom {headroom:F2} ({(headroom >= 1f ? "fine" : "throttling")})";
+            }
+        }
+        catch { }
+
+        // 3) Thermal status (API 29+).
+        try
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(29)
+                && Application.Context.GetSystemService(Context.PowerService) is Android.OS.PowerManager pm)
+            {
+                int status = (int)pm.CurrentThermalStatus;
+                if (status > 0) return $"SoC thermal: {ThermalStatusText(status)}";
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    private static string ThermalStatusText(int status) => status switch
+    {
+        1 => "light",
+        2 => "moderate",
+        3 => "severe",
+        4 => "critical",
+        5 => "emergency",
+        6 => "shutdown",
+        _ => "none"
+    };
 }
 
 public sealed class AndroidWifiProvider : IWifiProvider

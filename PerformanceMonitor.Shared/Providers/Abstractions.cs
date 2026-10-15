@@ -102,6 +102,14 @@ public interface ICpuProvider
     string? ProcessStatsUnavailableMessage => null;
 
     string? PerCoreFrequencyText => null;
+
+    // Distribution of time each core spent at each frequency, e.g.
+    // "3900 MHz 61%, 3800 MHz 12%, ...". null when the kernel does not expose
+    // cpufreq time_in_state (or the files are unreadable).
+    string? FrequencyResidencyText => null;
+
+    // Android only: this app's own CPU usage ("3.2% of one core"). null elsewhere.
+    string? AppUsageText => null;
 }
 
 public interface IGpuProvider

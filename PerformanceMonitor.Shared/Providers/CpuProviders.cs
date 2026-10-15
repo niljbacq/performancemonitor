@@ -340,6 +340,69 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         }
     }
 
+    // Frequency residency: how much time the cores spent at each P-state
+    // (cpufreq "time_in_state"). Percentages are unit-independent, so no
+    // conversion of the raw tick counts is needed.
+    public string? FrequencyResidencyText
+    {
+        get
+        {
+            try
+            {
+                var totals = new SortedDictionary<long, long>();
+                for (int i = 0; i < Environment.ProcessorCount; i++)
+                {
+                    string[] paths =
+                    {
+                        $"/sys/devices/system/cpu/cpu{i}/cpufreq/stats/time_in_state",
+                        $"/sys/devices/system/cpu/cpufreq/policy{i}/stats/time_in_state"
+                    };
+                    foreach (string path in paths)
+                    {
+                        if (!File.Exists(path)) continue;
+                        AccumulateResidency(path, totals);
+                        break;
+                    }
+                }
+                return FormatResidency(totals);
+            }
+            catch { return null; }
+        }
+    }
+
+    // time_in_state lines are "<freq kHz> <ticks>".
+    internal static void AccumulateResidency(string path, SortedDictionary<long, long> totals)
+    {
+        try
+        {
+            foreach (string line in File.ReadLines(path))
+            {
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2) continue;
+                if (!long.TryParse(parts[0], out long khz)) continue;
+                if (!long.TryParse(parts[1], out long ticks)) continue;
+                totals[khz] = totals.TryGetValue(khz, out long t) ? t + ticks : ticks;
+            }
+        }
+        catch { }
+    }
+
+    internal static string? FormatResidency(SortedDictionary<long, long> totals)
+    {
+        if (totals.Count == 0) return null;
+        long grand = 0;
+        foreach (var kv in totals) grand += kv.Value;
+        if (grand <= 0) return null;
+
+        var top = totals
+            .OrderByDescending(kv => kv.Value)
+            .Take(3)
+            .Where(kv => kv.Value > 0)
+            .Select(kv => $"{kv.Key / 1000} MHz {kv.Value * 100.0 / grand:F0}%");
+        string text = string.Join(", ", top);
+        return text.Length == 0 ? null : text;
+    }
+
     // Linux has no per-process "handles" the way Windows does; the closest analogue
     // is the count of open file descriptors across all processes. Process.HandleCount
     // throws on Linux, so the base-class GetProcessStats would report N/A — this

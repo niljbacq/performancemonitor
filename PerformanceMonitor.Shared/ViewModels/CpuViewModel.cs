@@ -65,6 +65,8 @@ public partial class CpuViewModel : ViewModelBase
     [ObservableProperty] private string? _perCoreFrequencyText;
     [ObservableProperty] private string? _temperatureText;
     [ObservableProperty] private string? _pressureText;
+    [ObservableProperty] private string? _frequencyResidencyText;
+    [ObservableProperty] private string? _appUsageText;
 
     private readonly ICpuProvider _provider;
 
@@ -123,6 +125,8 @@ public partial class CpuViewModel : ViewModelBase
                 ProcessStats? stats = statsDue && statsNote == null ? _provider.GetProcessStats() : null;
 
                 string? perCoreText = _provider.PerCoreFrequencyText;
+                string? residencyText = _provider.FrequencyResidencyText;
+                string? appUsageText = _provider.AppUsageText;
 
                 Dispatcher.UIThread.Post(() =>
                 {
@@ -131,6 +135,8 @@ public partial class CpuViewModel : ViewModelBase
                     Uptime = uptimeText;
 
                     if (perCoreText != null) PerCoreFrequencyText = perCoreText;
+                    if (residencyText != null) FrequencyResidencyText = residencyText;
+                    if (appUsageText != null) AppUsageText = appUsageText;
 
                     if (stats != null)
                     {

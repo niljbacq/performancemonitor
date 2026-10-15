@@ -270,6 +270,8 @@
                                                IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock Text="Pressure (PSI):" Foreground="#888888"
                                                IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="Freq residency:" Foreground="#888888"
+                                               IsVisible="{Binding FrequencyResidencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Spacing="4">
@@ -285,6 +287,8 @@
                                                IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock Text="{Binding PressureText}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
                                                IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="{Binding FrequencyResidencyText}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding FrequencyResidencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 </StackPanel>
                             </Grid>
                         </Grid>
@@ -774,6 +778,8 @@
 <DockPanel Classes="mRow" IsVisible="{Binding SupportedAbis, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Supported ABIs"/><TextBlock Classes="mValue" Text="{Binding SupportedAbis}"/></DockPanel>
 <DockPanel Classes="mRow" IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Clusters"/><TextBlock Classes="mValue" Text="{Binding ClusterText}"/></DockPanel>
 <DockPanel Classes="mRow" IsVisible="{Binding PerCoreFrequencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Per-core now"/><TextBlock Classes="mValue" Text="{Binding PerCoreFrequencyText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding FrequencyResidencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Frequency residency"/><TextBlock Classes="mValue" Text="{Binding FrequencyResidencyText}"/></DockPanel>
+<DockPanel Classes="mRow" IsVisible="{Binding AppUsageText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="This app CPU"/><TextBlock Classes="mValue" Text="{Binding AppUsageText}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                             <Border Classes="mCard">
