@@ -18,6 +18,7 @@ public class AndroidApp : AvaloniaAndroidApplication<App>
         ProviderFactory.DiskFactory = () => new AndroidDiskProvider();
         ProviderFactory.GpuFactory = () => new AndroidGpuProvider();
         ProviderFactory.WifiFactory = () => new AndroidWifiProvider();
+        ProviderFactory.SystemFactory = () => new AndroidSystemInfoProvider();
 
         // Temporary: answers the IsLinux() question on your phone. Delete after reading the log.
         Android.Util.Log.Info("PerfMon", $"IsAndroid={OperatingSystem.IsAndroid()} IsLinux={OperatingSystem.IsLinux()}");

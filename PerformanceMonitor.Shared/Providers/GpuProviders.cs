@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 namespace TaskManager.Providers;
 
@@ -15,6 +16,10 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
     // GPU Engine 3D counters, grouped per phys_N adapter ordinal, primed once.
     private readonly Dictionary<int, List<PerformanceCounter>> _perfCounters = new();
     private bool _perfCountersBuilt;
+
+    // GPU Adapter Memory counters (bytes per adapter), grouped per phys_N.
+    private readonly Dictionary<int, (List<PerformanceCounter> Dedicated, List<PerformanceCounter> Shared)> _adapterMem = new();
+    private bool _adapterMemBuilt;
     private List<GpuInfo>? _cached;
     private readonly object _lock = new();
 
@@ -71,12 +76,37 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
             physIdx++;
         }
 
+        // GPU memory for any vendor, without DXGI: the "GPU Adapter Memory"
+        // counters give Dedicated/Shared Usage in bytes per adapter. Total VRAM
+        // comes from the registry (qwMemorySize), which is not capped at 4 GB.
+        var memByPhys = SampleAdapterMemoryByPhys();
+        int memIdx = 0;
+        foreach (var g in result)
+        {
+            if (g.MemoryUsage != null) continue;
+            if (memIdx >= memByPhys.Count) break;
+            var (dedicated, shared) = memByPhys.ElementAt(memIdx).Value;
+            if (dedicated > 0 || shared > 0 || g.TotalMemoryBytes != null)
+            {
+                string used = Bytes(dedicated);
+                g.MemoryUsage = g.TotalMemoryBytes is long total ? $"{used} / {Bytes(total)}" : used;
+                if (shared > 0) g.SharedMemoryUsage = Bytes(shared);
+            }
+            memIdx++;
+        }
+
         return result;
     }
+
+    private static string Bytes(long b) =>
+        b >= 1024L * 1024 * 1024 ? $"{b / (1024.0 * 1024 * 1024):F2} GB"
+        : b >= 1024L * 1024 ? $"{b / (1024.0 * 1024):F0} MB"
+        : $"{b / 1024.0:F0} KB";
 
     private List<GpuInfo> BuildList()
     {
         var list = new List<GpuInfo>();
+        var vramTotals = ReadDisplayAdapterTotalBytes();
         try
         {
             using var searcher = new System.Management.ManagementObjectSearcher("SELECT * FROM Win32_VideoController");
@@ -93,7 +123,8 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
                     GraphicsApi = "DirectX 12",
                     PhysicalLocation = pnp ?? "PCI Bus",
                     Vendor = VendorFromName(name),
-                    Kind = GpuClassifier.Classify(name, pnp)
+                    Kind = GpuClassifier.Classify(name, pnp),
+                    TotalMemoryBytes = MatchTotalBytes(vramTotals, pnp)
                 };
                 if (DateTime.TryParse(obj["DriverDate"]?.ToString(), out var date))
                     info.DriverDate = date.ToShortDateString();
@@ -165,6 +196,102 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         while (end < instance.Length && char.IsDigit(instance[end])) end++;
         if (end == start) return null;
         return int.TryParse(instance.AsSpan(start, end - start), out int v) ? v : null;
+    }
+
+    private SortedDictionary<int, (long Dedicated, long Shared)> SampleAdapterMemoryByPhys()
+    {
+        EnsureAdapterMemoryCounters();
+        var byPhys = new SortedDictionary<int, (long, long)>();
+        foreach (var kv in _adapterMem)
+        {
+            long dedicated = 0, shared = 0;
+            foreach (var c in kv.Value.Dedicated) dedicated += (long)c.NextValue();
+            foreach (var c in kv.Value.Shared) shared += (long)c.NextValue();
+            byPhys[kv.Key] = (dedicated, shared);
+        }
+        return byPhys;
+    }
+
+    private void EnsureAdapterMemoryCounters()
+    {
+        if (_adapterMemBuilt) return;
+        _adapterMemBuilt = true;
+        try
+        {
+            var category = new PerformanceCounterCategory("GPU Adapter Memory");
+            foreach (var instance in category.GetInstanceNames())
+            {
+                int? phys = PhysIndex(instance);
+                if (phys == null) continue;
+
+                var dedicated = new PerformanceCounter("GPU Adapter Memory", "Dedicated Usage", instance, true);
+                var shared = new PerformanceCounter("GPU Adapter Memory", "Shared Usage", instance, true);
+                dedicated.NextValue();
+                shared.NextValue();
+
+                if (!_adapterMem.TryGetValue(phys.Value, out var lists))
+                {
+                    lists = (new List<PerformanceCounter>(), new List<PerformanceCounter>());
+                    _adapterMem[phys.Value] = lists;
+                }
+                lists.Dedicated.Add(dedicated);
+                lists.Shared.Add(shared);
+            }
+        }
+        catch { }
+    }
+
+    // Display-adapter total VRAM from the registry. Win32_VideoController.AdapterRAM
+    // is a uint32 and saturates at 4 GB; HardwareInformation.qwMemorySize is a
+    // 64-bit REG_BINARY under the display class key.
+    private static Dictionary<string, long> ReadDisplayAdapterTotalBytes()
+    {
+        var result = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        const string classKey = @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+        try
+        {
+            using var root = Registry.LocalMachine.OpenSubKey(classKey);
+            if (root == null) return result;
+            foreach (string name in root.GetSubKeyNames())
+            {
+                if (name.Length != 4 || !name.All(char.IsDigit)) continue;
+                using var sub = root.OpenSubKey(name);
+                if (sub == null) continue;
+                if (sub.GetValue("MatchingDeviceId") is not string match || match.Length == 0) continue;
+                long total = ReadQword(sub, "HardwareInformation.qwMemorySize");
+                if (total > 0) result[match] = total;
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    private static long ReadQword(RegistryKey key, string valueName)
+    {
+        try
+        {
+            object? v = key.GetValue(valueName);
+            if (v is byte[] bytes && bytes.Length >= 8) return BitConverter.ToInt64(bytes, 0);
+            if (v is long l) return l;
+            if (v is int i) return i;
+        }
+        catch { }
+        return 0;
+    }
+
+    // Match a WMI PNPDeviceID against a display-class MatchingDeviceId prefix
+    // (e.g. "PCI\VEN_1002&DEV_130F&SUBSYS_..." matches the longer PNPDeviceID).
+    private static long? MatchTotalBytes(Dictionary<string, long> totals, string? pnp)
+    {
+        if (string.IsNullOrEmpty(pnp) || totals.Count == 0) return null;
+        string norm = pnp.ToUpperInvariant();
+        foreach (var kv in totals)
+        {
+            string m = kv.Key.ToUpperInvariant();
+            if (norm.StartsWith(m, StringComparison.Ordinal) || m.StartsWith(norm, StringComparison.Ordinal))
+                return kv.Value;
+        }
+        return null;
     }
 
     private static string? VendorFromName(string name)
@@ -458,7 +585,8 @@ internal static class GpuMap
         UtilizationText = src.UtilizationText,
         TemperatureText = src.TemperatureText,
         MemoryUsage = src.MemoryUsage,
-        SharedMemoryUsage = src.SharedMemoryUsage
+        SharedMemoryUsage = src.SharedMemoryUsage,
+        TotalMemoryBytes = src.TotalMemoryBytes
     };
 
     public static GpuInfo? Primary(IReadOnlyList<GpuInfo> list)

@@ -69,6 +69,7 @@
                 <Button Classes="nav" Command="{Binding SelectDiskCommand}" Content="Disk" Tag="{Binding IsDiskActive}"/>
                 <Button Classes="nav" Command="{Binding SelectWifiCommand}" Content="Wi-Fi" Tag="{Binding IsWifiActive}"/>
                 <Button Classes="nav" Command="{Binding SelectGpuCommand}" Content="GPU" Tag="{Binding IsGpuActive}"/>
+                <Button Classes="nav" Command="{Binding SelectSystemCommand}" Content="System" Tag="{Binding IsSystemActive}"/>
             </StackPanel>
         </Border>
 
@@ -122,6 +123,14 @@
                                 <StackPanel>
                                     <TextBlock Text="GPU" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
                                     <TextBlock Text="3D utilization, temperature and VRAM usage" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Classes="homeCard" Margin="10,10,0,0"
+                                    Command="{Binding $parent[views:MainView].DataContext.SelectSystemCommand}">
+                                <StackPanel>
+                                    <TextBlock Text="System" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Text="OS, kernel, runtime and device details" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Button>
                         </UniformGrid>
@@ -625,6 +634,46 @@
                     </Grid>
                 </DataTemplate>
 
+                <!-- System View Template -->
+                <DataTemplate DataType="{x:Type vm:SystemViewModel}">
+                    <Grid RowDefinitions="Auto, *" Margin="24">
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
+                            <TextBlock Grid.Column="0" Text="System" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding OperatingSystem}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1">
+                            <Grid ColumnDefinitions="*, *">
+                                <StackPanel Grid.Column="0" Spacing="8" Margin="0,0,24,0">
+                                    <TextBlock Text="Platform" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,4"/>
+                                    <DockPanel><TextBlock Text="Operating system" Foreground="#888888"/><TextBlock Text="{Binding OperatingSystem}" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding Distro, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Distribution" Foreground="#888888"/><TextBlock Text="{Binding Distro}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding Kernel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Kernel" Foreground="#888888"/><TextBlock Text="{Binding Kernel}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding MachineName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Machine name" Foreground="#888888"/><TextBlock Text="{Binding MachineName}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding ProcessorCount, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Processor count" Foreground="#888888"/><TextBlock Text="{Binding ProcessorCount}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+
+                                    <TextBlock Text="Android" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,16,0,4" IsVisible="{Binding DeviceModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <DockPanel IsVisible="{Binding Manufacturer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Manufacturer" Foreground="#888888"/><TextBlock Text="{Binding Manufacturer}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding DeviceModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Device model" Foreground="#888888"/><TextBlock Text="{Binding DeviceModel}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding DeviceHardware, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Hardware" Foreground="#888888"/><TextBlock Text="{Binding DeviceHardware}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding SocModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="SoC model" Foreground="#888888"/><TextBlock Text="{Binding SocModel}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding AndroidRelease, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Android release" Foreground="#888888"/><TextBlock Text="{Binding AndroidRelease}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding AndroidSdk, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="API level" Foreground="#888888"/><TextBlock Text="{Binding AndroidSdk}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding AndroidBoard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Board" Foreground="#888888"/><TextBlock Text="{Binding AndroidBoard}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <TextBlock Text="Runtime" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,4"/>
+                                    <DockPanel IsVisible="{Binding Runtime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text=".NET runtime" Foreground="#888888"/><TextBlock Text="{Binding Runtime}" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding Architecture, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="OS architecture" Foreground="#888888"/><TextBlock Text="{Binding Architecture}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding ProcessArchitecture, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Process architecture" Foreground="#888888"/><TextBlock Text="{Binding ProcessArchitecture}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                    <DockPanel IsVisible="{Binding Avalonia, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Avalonia" Foreground="#888888"/><TextBlock Text="{Binding Avalonia}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                    </Grid>
+                </DataTemplate>
+
             </ContentControl.DataTemplates>
         </ContentControl>
 
@@ -740,6 +789,12 @@
                                 <StackPanel>
                                     <TextBlock Classes="mCardTitle" Text="GPU"/>
                                     <TextBlock Classes="mSub" Text="Graphics device details"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="mHomeCard" Command="{Binding $parent[views:MainView].DataContext.SelectSystemCommand}">
+                                <StackPanel>
+                                    <TextBlock Classes="mCardTitle" Text="System"/>
+                                    <TextBlock Classes="mSub" Text="OS, kernel, runtime, device"/>
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -983,6 +1038,50 @@
                     </ScrollViewer>
                 </DataTemplate>
 
+                <!-- SYSTEM -->
+                <DataTemplate DataType="{x:Type vm:SystemViewModel}" x:DataType="vm:SystemViewModel">
+                    <ScrollViewer>
+                        <StackPanel Margin="16" Spacing="12">
+                            <TextBlock Classes="mTitle" Text="System"/>
+                            <TextBlock Classes="mSub" Text="{Binding OperatingSystem}"/>
+
+                            <Border Classes="mCard">
+                                <StackPanel>
+                                    <TextBlock Classes="mCardTitle" Margin="0,0,0,6" Text="Platform"/>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding OperatingSystem, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Operating system"/><TextBlock Classes="mValue" Text="{Binding OperatingSystem}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Distro, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Distribution"/><TextBlock Classes="mValue" Text="{Binding Distro}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Kernel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Kernel"/><TextBlock Classes="mValue" Text="{Binding Kernel}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding MachineName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Machine name"/><TextBlock Classes="mValue" Text="{Binding MachineName}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding ProcessorCount, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Processor count"/><TextBlock Classes="mValue" Text="{Binding ProcessorCount}"/></DockPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="mCard">
+                                <StackPanel>
+                                    <TextBlock Classes="mCardTitle" Margin="0,0,0,6" Text="Runtime"/>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Runtime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text=".NET runtime"/><TextBlock Classes="mValue" Text="{Binding Runtime}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Architecture, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="OS architecture"/><TextBlock Classes="mValue" Text="{Binding Architecture}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding ProcessArchitecture, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Process architecture"/><TextBlock Classes="mValue" Text="{Binding ProcessArchitecture}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Avalonia, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Avalonia"/><TextBlock Classes="mValue" Text="{Binding Avalonia}"/></DockPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="mCard" IsVisible="{Binding DeviceModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <StackPanel>
+                                    <TextBlock Classes="mCardTitle" Margin="0,0,0,6" Text="Android"/>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Manufacturer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Manufacturer"/><TextBlock Classes="mValue" Text="{Binding Manufacturer}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding DeviceModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Device model"/><TextBlock Classes="mValue" Text="{Binding DeviceModel}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding DeviceHardware, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Hardware"/><TextBlock Classes="mValue" Text="{Binding DeviceHardware}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding SocModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="SoC model"/><TextBlock Classes="mValue" Text="{Binding SocModel}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding AndroidRelease, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Android release"/><TextBlock Classes="mValue" Text="{Binding AndroidRelease}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding AndroidSdk, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="API level"/><TextBlock Classes="mValue" Text="{Binding AndroidSdk}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding AndroidBoard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Board"/><TextBlock Classes="mValue" Text="{Binding AndroidBoard}"/></DockPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DataTemplate>
+
             </ContentControl.DataTemplates>
         </ContentControl>
 
@@ -1006,6 +1105,9 @@
                 </Button>
                 <Button Classes="mNav" Command="{Binding SelectGpuCommand}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="🎮"/><TextBlock Classes="mNavText" Text="GPU"/></StackPanel>
+                </Button>
+                <Button Classes="mNav" Command="{Binding SelectSystemCommand}">
+                    <StackPanel><TextBlock Classes="mNavIcon" Text="ℹ"/><TextBlock Classes="mNavText" Text="System"/></StackPanel>
                 </Button>
             </UniformGrid>
         </Border>

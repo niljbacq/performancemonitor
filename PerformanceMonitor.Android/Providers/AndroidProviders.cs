@@ -825,3 +825,42 @@ public sealed class AndroidWifiProvider : IWifiProvider
         return $"{(mask >> 24) & 0xFF}.{(mask >> 16) & 0xFF}.{(mask >> 8) & 0xFF}.{mask & 0xFF}";
     }
 }
+
+public sealed class AndroidSystemInfoProvider : CrossPlatformSystemInfoProvider
+{
+    public override SystemInfo GetInfo()
+    {
+        var info = base.GetInfo();
+
+        info.Manufacturer = Safe(() => Android.OS.Build.Manufacturer);
+        info.DeviceModel = Safe(() =>
+        {
+            string vendor = Android.OS.Build.Manufacturer ?? "";
+            string model = Android.OS.Build.Model ?? "";
+            string combined = $"{vendor} {model}".Trim();
+            return combined.Length > 0 ? combined : null;
+        });
+        info.DeviceHardware = Safe(() => Android.OS.Build.Hardware);
+        info.AndroidRelease = Safe(() => Android.OS.Build.VERSION.Release);
+        info.AndroidSdk = Safe(() => $"API {(int)Android.OS.Build.VERSION.SdkInt} ({Android.OS.Build.VERSION.SdkInt})");
+        info.AndroidBoard = Safe(() => Android.OS.Build.Board);
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(31))
+            info.SocModel = Safe(() => Android.OS.Build.SocModel);
+
+        // Android is Linux under the hood; it has no distro PRETTY_NAME, so drop
+        // the Linux-only distro row and keep the kernel (which is still useful).
+        info.Distro = null;
+        return info;
+    }
+
+    private static string? Safe(Func<string?> read)
+    {
+        try
+        {
+            string? value = read();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch { return null; }
+    }
+}

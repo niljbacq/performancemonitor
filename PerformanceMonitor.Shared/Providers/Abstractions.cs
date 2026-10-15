@@ -141,6 +141,9 @@ public sealed class GpuInfo
     public string? TemperatureText { get; set; }
     public string? MemoryUsage { get; set; }
     public string? SharedMemoryUsage { get; set; }
+    // Total VRAM in bytes, when the platform can report it (e.g. Windows registry
+    // HardwareInformation.qwMemorySize, which is not capped at 4 GB like AdapterRAM).
+    public long? TotalMemoryBytes { get; set; }
 }
 
 public interface IDiskProvider
@@ -252,6 +255,7 @@ public static class ProviderFactory
     public static Func<IDiskProvider>? DiskFactory { get; set; }
     public static Func<IWifiProvider>? WifiFactory { get; set; }
     public static Func<IMemoryProvider>? MemoryFactory { get; set; }
+    public static Func<ISystemInfoProvider>? SystemFactory { get; set; }
 
     public static ICpuProvider CreateCpu()
     {
@@ -297,4 +301,7 @@ public static class ProviderFactory
         if (OperatingSystem.IsLinux()) return new LinuxMemoryProvider();
         return new NullMemoryProvider();
     }
+
+    public static ISystemInfoProvider CreateSystem()
+        => SystemFactory?.Invoke() ?? new CrossPlatformSystemInfoProvider();
 }
