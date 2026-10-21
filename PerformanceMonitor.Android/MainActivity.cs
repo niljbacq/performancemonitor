@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
@@ -15,30 +16,32 @@ namespace TaskManager.Droid;
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode)]
 public class MainActivity : AvaloniaMainActivity
 {
-    private const int LocationRequestCode = 1001;
-    private const int NotificationRequestCode = 1002;
+    private const int PermissionRequestCode = 1001;
 
     protected override void OnCreate(Android.OS.Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-        RequestLocationPermissionIfNeeded();
-        RequestNotificationPermissionIfNeeded();
+        RequestPermissionsIfNeeded();
         StartMonitorService();
     }
 
-    private void RequestLocationPermissionIfNeeded()
+    // One request for everything still missing: Android shows a single
+    // permission flow instead of two overlapping dialogs.
+    // Location is needed to read the Wi-Fi name; notifications (Android 13+)
+    // are needed to show the foreground-service notification.
+    private void RequestPermissionsIfNeeded()
     {
-        if (CheckSelfPermission(Android.Manifest.Permission.AccessFineLocation) == Permission.Granted) return;
-        RequestPermissions(new[] { Android.Manifest.Permission.AccessFineLocation }, LocationRequestCode);
-    }
+        var needed = new List<string>();
 
-    // Android 13+ requires a runtime grant before the foreground-service
-    // notification can be shown.
-    private void RequestNotificationPermissionIfNeeded()
-    {
-        if (!OperatingSystem.IsAndroidVersionAtLeast(33)) return;
-        if (CheckSelfPermission(Android.Manifest.Permission.PostNotifications) == Permission.Granted) return;
-        RequestPermissions(new[] { Android.Manifest.Permission.PostNotifications }, NotificationRequestCode);
+        if (CheckSelfPermission(Android.Manifest.Permission.AccessFineLocation) != Permission.Granted)
+            needed.Add(Android.Manifest.Permission.AccessFineLocation);
+
+        if (OperatingSystem.IsAndroidVersionAtLeast(33) &&
+            CheckSelfPermission(Android.Manifest.Permission.PostNotifications) != Permission.Granted)
+            needed.Add(Android.Manifest.Permission.PostNotifications);
+
+        if (needed.Count > 0)
+            RequestPermissions(needed.ToArray(), PermissionRequestCode);
     }
 
     // Starts the special-use foreground service so sampling (and CSV logging)
@@ -51,6 +54,9 @@ public class MainActivity : AvaloniaMainActivity
             if (OperatingSystem.IsAndroidVersionAtLeast(26)) StartForegroundService(intent);
             else StartService(intent);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Android.Util.Log.Warn("PerfMon", $"Could not start monitor service: {ex.Message}");
+        }
     }
 }

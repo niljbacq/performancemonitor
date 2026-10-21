@@ -155,7 +155,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                 if (logical > 0) s.LogicalProcessors = logical.ToString();
             }
 
-            // Live speed: prefer cpufreq (kHz), fall back to the base clock from cpuinfo.
             string? liveMhz = ReadLiveCpuMhz();
             s.Speed = liveMhz != null
                 ? $"{double.Parse(liveMhz, System.Globalization.CultureInfo.InvariantCulture) / 1000.0:F2} GHz"
@@ -173,7 +172,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                     if (parts.Length != 2) continue;
                     string label = parts[0].Trim();
                     string value = parts[1].Trim();
-                    // Remove "(N instances)" suffix
                     int paren = value.IndexOf('(');
                     if (paren > 0) value = value[..paren].Trim();
 
@@ -196,10 +194,7 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                 }
             }
 
-            // CPU temperature from hwmon (k10temp for AMD, coretemp for Intel)
             s.TemperatureText = ReadCpuTemperature();
-
-            // Linux PSI: CPU stall pressure (kernel >= 4.20 with CONFIG_PSI).
             s.PressureText = LinuxPressure.Cpu();
         }
         catch
@@ -210,7 +205,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         return s;
     }
 
-    // Read CPU temperature from hwmon (k10temp for AMD, coretemp for Intel)
     private static string? ReadCpuTemperature()
     {
         try
@@ -224,9 +218,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                 if (!File.Exists(namePath)) continue;
                 
                 string name = File.ReadAllText(namePath).Trim();
-                // k10temp = AMD Family 15h/16h/17h (Kaveri, etc.)
-                // coretemp = Intel Core
-                // fam15h_power = AMD Family 15h power (also has temp)
                 if (name is not ("k10temp" or "coretemp" or "fam15h_power")) continue;
 
                 foreach (var tempFile in Directory.GetFiles(hwmonDir, "temp*_input"))
@@ -234,9 +225,8 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                     if (long.TryParse(File.ReadAllText(tempFile).Trim(), out long milliC))
                     {
                         double celsius = milliC / 1000.0;
-                        if (celsius > -20 && celsius < 150) // sanity check
+                        if (celsius > -20 && celsius < 150)
                         {
-                            // fam15h_power also has power1_input in µW
                             string? power = null;
                             if (name == "fam15h_power")
                             {
@@ -285,7 +275,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         catch { return 0; }
     }
 
-    // Current speed of CPU 0 (kHz), or null when unavailable.
     private static string? ReadLiveCpuMhz()
     {
         try
@@ -298,7 +287,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         return null;
     }
 
-    // Per-core frequencies ("3.9 / 3.9 / 3.9 / 3.9 GHz") for the Per-core now row.
     public string? PerCoreFrequencyText
     {
         get
@@ -318,7 +306,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         }
     }
 
-    // Real system uptime from /proc/uptime instead of the process's own tick count.
     public long UptimeMilliseconds
     {
         get
@@ -340,9 +327,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         }
     }
 
-    // Frequency residency: how much time the cores spent at each P-state
-    // (cpufreq "time_in_state"). Percentages are unit-independent, so no
-    // conversion of the raw tick counts is needed.
     public string? FrequencyResidencyText
     {
         get
@@ -370,7 +354,6 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         }
     }
 
-    // time_in_state lines are "<freq kHz> <ticks>".
     internal static void AccumulateResidency(string path, SortedDictionary<long, long> totals)
     {
         try
@@ -403,11 +386,9 @@ public sealed class LinuxCpuProvider : CpuProviderBase
         return text.Length == 0 ? null : text;
     }
 
-    // Linux has no per-process "handles" the way Windows does; the closest analogue
-    // is the count of open file descriptors across all processes. Process.HandleCount
-    // throws on Linux, so the base-class GetProcessStats would report N/A — this
-    // override sums /proc/<pid>/fd entries and falls back to the kernel-wide
-    // /proc/sys/fs/file-nr figure when a per-process read fails.
+    // Linux has no per-process "handles"; sum the open file descriptors across
+    // all readable /proc/<pid>/fd entries. Reads /proc/<pid>/status using
+    // whitespace splitting so both the space and tab separators parse.
     public override ProcessStats GetProcessStats()
     {
         try
@@ -424,7 +405,7 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                     foreach (string line in File.ReadLines(Path.Combine(procDir, "status")))
                     {
                         if (!line.StartsWith("Threads:", StringComparison.Ordinal)) continue;
-                        string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        string[] parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
                         if (parts.Length >= 2 && int.TryParse(parts[1], out int t)) threads += t;
                         break;
                     }
@@ -432,30 +413,15 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                 catch { }
 
                 try { fds += Directory.GetFiles(Path.Combine(procDir, "fd")).Length; }
-                catch { } // other users' fds are not readable
+                catch { }
             }
 
-            string handles = fds > 0 ? $"{fds} open files" : "Open files unreadable";
+            string handles = fds > 0 ? $"{fds} files" : "unreadable";
             return new ProcessStats(processes, threads, handles);
         }
         catch
         {
             return new ProcessStats(0, 0, "N/A");
         }
-    }
-
-    // /proc/sys/fs/file-nr: "allocated unused maximum" — the first column is the
-    // number of file handles currently allocated kernel-wide.
-    private static long ReadFileNr()
-    {
-        try
-        {
-            if (!File.Exists("/proc/sys/fs/file-nr")) return 0;
-            string line = File.ReadAllText("/proc/sys/fs/file-nr").Trim();
-            int sp = line.IndexOf(' ');
-            if (sp > 0 && long.TryParse(line[..sp], out long v)) return v;
-        }
-        catch { }
-        return 0;
     }
 }

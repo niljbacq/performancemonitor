@@ -10,7 +10,6 @@ namespace TaskManager.ViewModels;
 
 public partial class DiskViewModel : ViewModelBase
 {
-    // ---- Flat properties (kept for compatibility with any remaining bindings) ----
     private string _diskName = "Disk";
     public string DiskName { get => _diskName; set => SetProperty(ref _diskName, value); }
 
@@ -53,7 +52,6 @@ public partial class DiskViewModel : ViewModelBase
     [ObservableProperty] private string? _systemReservedText;
     [ObservableProperty] private string? _ioPressureText;
 
-    // ---- SSD / HDD split ----
     public DiskSubViewModel Ssd { get; } = new DiskSubViewModel("SSD", "No SSD detected");
     public DiskSubViewModel Hdd { get; } = new DiskSubViewModel("HDD", "No HDD detected");
 
@@ -204,7 +202,6 @@ public partial class DiskViewModel : ViewModelBase
                         }
                         if (sample.ResponseMs is double ms) AverageResponseTime = $"{ms:F1} ms";
 
-                        // Route the same sample to whichever sub-VM holds the disk
                         if (Hdd.HasDisk) Hdd.UpdateSample(sample);
                         else if (Ssd.HasDisk) Ssd.UpdateSample(sample);
                     });
@@ -276,20 +273,27 @@ public partial class DiskSubViewModel : ViewModelBase
     private string _modelName = "";
     public string ModelName { get => _modelName; set => SetProperty(ref _modelName, value); }
 
-    private string _activeTime = "0%";
-    public string ActiveTime { get => _activeTime; set => SetProperty(ref _activeTime, value); }
+    private string? _activeTime;
+    public string? ActiveTime { get => _activeTime; set => SetProperty(ref _activeTime, value); }
 
     private double _activeTimeValue;
     public double ActiveTimeValue { get => _activeTimeValue; set => SetProperty(ref _activeTimeValue, value); }
 
-    private string _averageResponseTime = "0.0 ms";
-    public string AverageResponseTime { get => _averageResponseTime; set => SetProperty(ref _averageResponseTime, value); }
+    private string? _averageResponseTime;
+    public string? AverageResponseTime { get => _averageResponseTime; set => SetProperty(ref _averageResponseTime, value); }
 
-    private string _readSpeed = "0 KB/s";
-    public string ReadSpeed { get => _readSpeed; set => SetProperty(ref _readSpeed, value); }
+    private string? _readSpeed;
+    public string? ReadSpeed { get => _readSpeed; set => SetProperty(ref _readSpeed, value); }
 
-    private string _writeSpeed = "0 KB/s";
-    public string WriteSpeed { get => _writeSpeed; set => SetProperty(ref _writeSpeed, value); }
+    // Raw bytes/sec for the mobile read/write speed bars.
+    private double? _readSpeedBytes;
+    public double? ReadSpeedBytes { get => _readSpeedBytes; set => SetProperty(ref _readSpeedBytes, value); }
+
+    private string? _writeSpeed;
+    public string? WriteSpeed { get => _writeSpeed; set => SetProperty(ref _writeSpeed, value); }
+
+    private double? _writeSpeedBytes;
+    public double? WriteSpeedBytes { get => _writeSpeedBytes; set => SetProperty(ref _writeSpeedBytes, value); }
 
     private string _capacity = "-";
     public string Capacity { get => _capacity; set => SetProperty(ref _capacity, value); }
@@ -297,23 +301,23 @@ public partial class DiskSubViewModel : ViewModelBase
     private string _formatted = "-";
     public string Formatted { get => _formatted; set => SetProperty(ref _formatted, value); }
 
-    private string _systemDisk = "-";
-    public string SystemDisk { get => _systemDisk; set => SetProperty(ref _systemDisk, value); }
+    private string? _systemDisk;
+    public string? SystemDisk { get => _systemDisk; set => SetProperty(ref _systemDisk, value); }
 
-    private string _pageFile = "-";
-    public string PageFile { get => _pageFile; set => SetProperty(ref _pageFile, value); }
+    private string? _pageFile;
+    public string? PageFile { get => _pageFile; set => SetProperty(ref _pageFile, value); }
 
-    private string _usedText = "-";
-    public string UsedText { get => _usedText; set => SetProperty(ref _usedText, value); }
+    private string? _usedText;
+    public string? UsedText { get => _usedText; set => SetProperty(ref _usedText, value); }
 
-    private string _freeText = "-";
-    public string FreeText { get => _freeText; set => SetProperty(ref _freeText, value); }
+    private string? _freeText;
+    public string? FreeText { get => _freeText; set => SetProperty(ref _freeText, value); }
 
-    private string _appsAndDataText = "-";
-    public string AppsAndDataText { get => _appsAndDataText; set => SetProperty(ref _appsAndDataText, value); }
+    private string? _appsAndDataText;
+    public string? AppsAndDataText { get => _appsAndDataText; set => SetProperty(ref _appsAndDataText, value); }
 
-    private string _systemReservedText = "-";
-    public string SystemReservedText { get => _systemReservedText; set => SetProperty(ref _systemReservedText, value); }
+    private string? _systemReservedText;
+    public string? SystemReservedText { get => _systemReservedText; set => SetProperty(ref _systemReservedText, value); }
 
     public DiskSubViewModel(string typeLabel, string emptyLabel)
     {
@@ -328,28 +332,37 @@ public partial class DiskSubViewModel : ViewModelBase
         ModelName = d.ModelName ?? "Generic Storage Device";
         Capacity = d.Capacity ?? "-";
         Formatted = d.Formatted ?? "-";
-        SystemDisk = d.SystemDisk ?? "No";
-        PageFile = d.PageFile ?? "No";
-        UsedText = d.UsedText ?? "-";
-        FreeText = d.FreeText ?? "-";
-        AppsAndDataText = d.AppsAndDataText ?? "-";
-        SystemReservedText = d.SystemReservedText ?? "-";
+        SystemDisk = d.SystemDisk;
+        PageFile = d.PageFile;
+        UsedText = d.UsedText;
+        FreeText = d.FreeText;
+        AppsAndDataText = d.AppsAndDataText;
+        SystemReservedText = d.SystemReservedText;
     }
 
     public void UpdateSample(DiskInfo d)
     {
         if (d.NotSupported)
         {
-            string msg = d.NotSupportedMessage ?? "N/A";
-            ReadSpeed = msg;
-            WriteSpeed = msg;
-            ActiveTime = msg;
-            AverageResponseTime = msg;
+            ReadSpeed = null;
+            ReadSpeedBytes = null;
+            WriteSpeed = null;
+            WriteSpeedBytes = null;
+            ActiveTime = null;
+            AverageResponseTime = null;
             return;
         }
 
-        if (d.ReadBytesPerSec is double r) ReadSpeed = DiskViewModel.FormatSpeed(r);
-        if (d.WriteBytesPerSec is double w) WriteSpeed = DiskViewModel.FormatSpeed(w);
+        if (d.ReadBytesPerSec is double r)
+        {
+            ReadSpeedBytes = r;
+            ReadSpeed = DiskViewModel.FormatSpeed(r);
+        }
+        if (d.WriteBytesPerSec is double w)
+        {
+            WriteSpeedBytes = w;
+            WriteSpeed = DiskViewModel.FormatSpeed(w);
+        }
         if (d.ActivePercent is double a)
         {
             ActiveTimeValue = a;
@@ -362,16 +375,25 @@ public partial class DiskSubViewModel : ViewModelBase
     {
         if (d.NotSupported)
         {
-            string msg = d.NotSupportedMessage ?? "N/A";
-            ReadSpeed = msg;
-            WriteSpeed = msg;
-            ActiveTime = msg;
-            AverageResponseTime = msg;
+            ReadSpeed = null;
+            ReadSpeedBytes = null;
+            WriteSpeed = null;
+            WriteSpeedBytes = null;
+            ActiveTime = null;
+            AverageResponseTime = null;
             return;
         }
 
-        if (d.ReadBytesPerSec is double r) ReadSpeed = DiskViewModel.FormatSpeed(r);
-        if (d.WriteBytesPerSec is double w) WriteSpeed = DiskViewModel.FormatSpeed(w);
+        if (d.ReadBytesPerSec is double r)
+        {
+            ReadSpeedBytes = r;
+            ReadSpeed = DiskViewModel.FormatSpeed(r);
+        }
+        if (d.WriteBytesPerSec is double w)
+        {
+            WriteSpeedBytes = w;
+            WriteSpeed = DiskViewModel.FormatSpeed(w);
+        }
         if (d.ActivePercent is double a)
         {
             ActiveTimeValue = a;
@@ -387,16 +409,18 @@ public partial class DiskSubViewModel : ViewModelBase
         ModelName = EmptyLabel;
         Capacity = "-";
         Formatted = "-";
-        SystemDisk = "-";
-        PageFile = "-";
-        UsedText = "-";
-        FreeText = "-";
-        AppsAndDataText = "-";
-        SystemReservedText = "-";
-        ActiveTime = "0%";
+        SystemDisk = null;
+        PageFile = null;
+        UsedText = null;
+        FreeText = null;
+        AppsAndDataText = null;
+        SystemReservedText = null;
+        ActiveTime = null;
         ActiveTimeValue = 0;
-        AverageResponseTime = "0.0 ms";
-        ReadSpeed = "0 KB/s";
-        WriteSpeed = "0 KB/s";
+        AverageResponseTime = null;
+        ReadSpeed = null;
+        ReadSpeedBytes = null;
+        WriteSpeed = null;
+        WriteSpeedBytes = null;
     }
 }

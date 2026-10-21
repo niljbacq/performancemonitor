@@ -12,32 +12,40 @@ public partial class CpuViewModel : ViewModelBase
     private string _cpuName = "Detecting CPU...";
     public string CpuName { get => _cpuName; set => SetProperty(ref _cpuName, value); }
 
+    // Raw hardware/SoC id, shown under the marketing name (Android only).
+    private string? _hardwareName;
+    public string? HardwareName { get => _hardwareName; set => SetProperty(ref _hardwareName, value); }
+
     private string _utilization = "0%";
     public string Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
 
     private double _utilizationValue = 0;
     public double UtilizationValue { get => _utilizationValue; set => SetProperty(ref _utilizationValue, value); }
 
-    private string _speed = "0.00 GHz";
-    public string Speed { get => _speed; set => SetProperty(ref _speed, value); }
+    private bool _hasUtilization = true;
+    public bool HasUtilization { get => _hasUtilization; set => SetProperty(ref _hasUtilization, value); }
 
-    private string _processes = "0";
-    public string Processes { get => _processes; set => SetProperty(ref _processes, value); }
+    private string? _speed;
+    public string? Speed { get => _speed; set => SetProperty(ref _speed, value); }
 
-    private string _threads = "0";
-    public string Threads { get => _threads; set => SetProperty(ref _threads, value); }
+    // Null = not available on this platform, so the row hides.
+    private string? _processes;
+    public string? Processes { get => _processes; set => SetProperty(ref _processes, value); }
 
-    private string _handles = "0";
-    public string Handles { get => _handles; set => SetProperty(ref _handles, value); }
+    private string? _threads;
+    public string? Threads { get => _threads; set => SetProperty(ref _threads, value); }
+
+    private string? _handles;
+    public string? Handles { get => _handles; set => SetProperty(ref _handles, value); }
 
     private string _uptime = "0:00:00:00";
     public string Uptime { get => _uptime; set => SetProperty(ref _uptime, value); }
 
-    private string _baseSpeed = "N/A";
-    public string BaseSpeed { get => _baseSpeed; set => SetProperty(ref _baseSpeed, value); }
+    private string? _baseSpeed;
+    public string? BaseSpeed { get => _baseSpeed; set => SetProperty(ref _baseSpeed, value); }
 
-    private string _sockets = "1";
-    public string Sockets { get => _sockets; set => SetProperty(ref _sockets, value); }
+    private string? _sockets;
+    public string? Sockets { get => _sockets; set => SetProperty(ref _sockets, value); }
 
     private string _cores = Environment.ProcessorCount.ToString();
     public string Cores { get => _cores; set => SetProperty(ref _cores, value); }
@@ -45,17 +53,17 @@ public partial class CpuViewModel : ViewModelBase
     private string _logicalProcessors = Environment.ProcessorCount.ToString();
     public string LogicalProcessors { get => _logicalProcessors; set => SetProperty(ref _logicalProcessors, value); }
 
-    private string _virtualization = "Unknown";
-    public string Virtualization { get => _virtualization; set => SetProperty(ref _virtualization, value); }
+    private string? _virtualization;
+    public string? Virtualization { get => _virtualization; set => SetProperty(ref _virtualization, value); }
 
-    private string _l1Cache = "N/A";
-    public string L1Cache { get => _l1Cache; set => SetProperty(ref _l1Cache, value); }
+    private string? _l1Cache;
+    public string? L1Cache { get => _l1Cache; set => SetProperty(ref _l1Cache, value); }
 
-    private string _l2Cache = "N/A";
-    public string L2Cache { get => _l2Cache; set => SetProperty(ref _l2Cache, value); }
+    private string? _l2Cache;
+    public string? L2Cache { get => _l2Cache; set => SetProperty(ref _l2Cache, value); }
 
-    private string _l3Cache = "N/A";
-    public string L3Cache { get => _l3Cache; set => SetProperty(ref _l3Cache, value); }
+    private string? _l3Cache;
+    public string? L3Cache { get => _l3Cache; set => SetProperty(ref _l3Cache, value); }
 
     [ObservableProperty] private string? _frequencyMinText;
     [ObservableProperty] private string? _frequencyMaxText;
@@ -84,6 +92,8 @@ public partial class CpuViewModel : ViewModelBase
         var s = await Task.Run(() => _provider.GetSpecs());
 
         if (s.Name != null) CpuName = s.Name;
+        if (s.MarketingName != null) CpuName = s.MarketingName;
+        HardwareName = s.Name;
         if (s.BaseSpeed != null) BaseSpeed = s.BaseSpeed;
         if (s.Speed != null) Speed = s.Speed;
         if (s.Cores != null) Cores = s.Cores;
@@ -130,6 +140,7 @@ public partial class CpuViewModel : ViewModelBase
 
                 Dispatcher.UIThread.Post(() =>
                 {
+                    HasUtilization = usageNote == null;
                     UtilizationValue = usageNote == null ? cpuPercent : 0;
                     Utilization = usageNote ?? $"{cpuPercent}%";
                     Uptime = uptimeText;
@@ -140,15 +151,16 @@ public partial class CpuViewModel : ViewModelBase
 
                     if (stats != null)
                     {
-                        Processes = stats.Processes.ToString();
-                        Threads = stats.Threads.ToString();
+                        Processes = stats.Processes?.ToString();
+                        Threads = stats.Threads?.ToString();
                         Handles = stats.Handles;
                     }
                     else if (statsDue && statsNote != null)
                     {
-                        Processes = statsNote;
-                        Threads = statsNote;
-                        Handles = statsNote;
+                        // Platform has no process stats at all; clear the rows so they hide.
+                        Processes = null;
+                        Threads = null;
+                        Handles = null;
                     }
                 });
             }

@@ -8,10 +8,10 @@ namespace TaskManager.Providers;
 
 public sealed record PerfSample(
     DateTime Utc,
-    float CpuPercent,
-    double MemoryUsedGb,
-    double MemoryTotalGb,
-    double MemoryPercent,
+    float? CpuPercent,
+    double? MemoryUsedGb,
+    double? MemoryTotalGb,
+    double? MemoryPercent,
     double? DiskReadBps,
     double? DiskWriteBps,
     double? DiskActivePercent,
@@ -147,10 +147,16 @@ public sealed class SamplingService : IDisposable
     {
         DateTime utc = DateTime.UtcNow;
 
-        float cpu = 0;
-        try { cpu = _cpu.GetUsagePercent(); } catch { }
+        // null = unavailable (blocked by the OS or the read failed), never a fake 0.
+        float? cpu = null;
+        try
+        {
+            float raw = _cpu.GetUsagePercent();
+            if (_cpu.UsageUnavailableMessage == null) cpu = raw;
+        }
+        catch { }
 
-        double usedGb = 0, totalGb = 0, memPercent = 0;
+        double? usedGb = null, totalGb = null, memPercent = null;
         try
         {
             var m = _memory.GetUsage();
@@ -193,10 +199,10 @@ public sealed class SamplingService : IDisposable
         var c = CultureInfo.InvariantCulture;
         return string.Join(',',
             s.Utc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", c),
-            s.CpuPercent.ToString("F1", c),
-            s.MemoryUsedGb.ToString("F2", c),
-            s.MemoryTotalGb.ToString("F2", c),
-            s.MemoryPercent.ToString("F0", c),
+            Num(s.CpuPercent, "F1"),
+            Num(s.MemoryUsedGb, "F2"),
+            Num(s.MemoryTotalGb, "F2"),
+            Num(s.MemoryPercent, "F0"),
             Num(s.DiskReadBps),
             Num(s.DiskWriteBps),
             Num(s.DiskActivePercent),
@@ -204,6 +210,6 @@ public sealed class SamplingService : IDisposable
             Num(s.GpuTemperatureC));
     }
 
-    private static string Num(double? value)
-        => value is double v ? v.ToString("F2", CultureInfo.InvariantCulture) : "";
+    private static string Num(double? value, string format = "F2")
+        => value is double v ? v.ToString(format, CultureInfo.InvariantCulture) : "";
 }

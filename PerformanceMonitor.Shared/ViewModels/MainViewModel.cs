@@ -12,7 +12,6 @@ public partial class MainViewModel : ViewModelBase
     private readonly DiskViewModel _diskViewModel;
     private readonly WifiViewModel _wifiViewModel;
     private readonly GpuViewModel _gpuViewModel;
-    private readonly SystemViewModel _systemViewModel;
 
     // Navigation state
     [ObservableProperty]
@@ -22,34 +21,27 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsDiskActive))]
     [NotifyPropertyChangedFor(nameof(IsWifiActive))]
     [NotifyPropertyChangedFor(nameof(IsGpuActive))]
-    [NotifyPropertyChangedFor(nameof(IsSystemActive))]
     private ViewModelBase _currentView;
 
-    // --- Active Tab State Checks ---
     public bool IsHomeActive => CurrentView is HomeViewModel;
     public bool IsCpuActive => CurrentView is CpuViewModel;
     public bool IsMemoryActive => CurrentView is MemoryViewModel;
     public bool IsDiskActive => CurrentView is DiskViewModel;
     public bool IsWifiActive => CurrentView is WifiViewModel;
     public bool IsGpuActive => CurrentView is GpuViewModel;
-    public bool IsSystemActive => CurrentView is SystemViewModel;
 
     public MainViewModel()
     {
-        // Initialize child view models once
         _homeViewModel = new HomeViewModel();
         _cpuViewModel = new CpuViewModel();
         _memoryViewModel = new MemoryViewModel();
         _diskViewModel = new DiskViewModel();
         _wifiViewModel = new WifiViewModel();
         _gpuViewModel = new GpuViewModel();
-        _systemViewModel = new SystemViewModel();
 
-        // Set default view on launch
         _currentView = _homeViewModel;
     }
 
-    // --- Navigation Commands ---
     [RelayCommand]
     private void SelectHome() => CurrentView = _homeViewModel;
 
@@ -67,7 +59,4 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void SelectGpu() => CurrentView = _gpuViewModel;
-
-    [RelayCommand]
-    private void SelectSystem() => CurrentView = _systemViewModel;
 }

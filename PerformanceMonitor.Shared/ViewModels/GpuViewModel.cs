@@ -11,35 +11,36 @@ namespace TaskManager.ViewModels;
 public partial class GpuViewModel : ViewModelBase
 {
     // ---- Flat properties (kept for compatibility with the single-GPU layout until Stage 5) ----
+    // null = no value from the provider, so nothing is shown (never a fake "N/A" or "0%").
     private string _gpuName = "Detecting GPU...";
     public string GpuName { get => _gpuName; set => SetProperty(ref _gpuName, value); }
 
-    private string _utilization = "0%";
-    public string Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
+    private string? _utilization;
+    public string? Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
 
     private double _utilizationValue = 0;
     public double UtilizationValue { get => _utilizationValue; set => SetProperty(ref _utilizationValue, value); }
 
-    private string _temperature = "N/A";
-    public string Temperature { get => _temperature; set => SetProperty(ref _temperature, value); }
+    private string? _temperature;
+    public string? Temperature { get => _temperature; set => SetProperty(ref _temperature, value); }
 
-    private string _driverVersion = "Unknown";
-    public string DriverVersion { get => _driverVersion; set => SetProperty(ref _driverVersion, value); }
+    private string? _driverVersion;
+    public string? DriverVersion { get => _driverVersion; set => SetProperty(ref _driverVersion, value); }
 
-    private string _driverDate = "Unknown";
-    public string DriverDate { get => _driverDate; set => SetProperty(ref _driverDate, value); }
+    private string? _driverDate;
+    public string? DriverDate { get => _driverDate; set => SetProperty(ref _driverDate, value); }
 
-    private string _directXVersion = "N/A";
-    public string DirectXVersion { get => _directXVersion; set => SetProperty(ref _directXVersion, value); }
+    private string? _directXVersion;
+    public string? DirectXVersion { get => _directXVersion; set => SetProperty(ref _directXVersion, value); }
 
-    private string _physicalLocation = "Unknown";
-    public string PhysicalLocation { get => _physicalLocation; set => SetProperty(ref _physicalLocation, value); }
+    private string? _physicalLocation;
+    public string? PhysicalLocation { get => _physicalLocation; set => SetProperty(ref _physicalLocation, value); }
 
-    private string _memoryUsage = "N/A";
-    public string MemoryUsage { get => _memoryUsage; set => SetProperty(ref _memoryUsage, value); }
+    private string? _memoryUsage;
+    public string? MemoryUsage { get => _memoryUsage; set => SetProperty(ref _memoryUsage, value); }
 
-    private string _sharedMemoryUsage = "N/A";
-    public string SharedMemoryUsage { get => _sharedMemoryUsage; set => SetProperty(ref _sharedMemoryUsage, value); }
+    private string? _sharedMemoryUsage;
+    public string? SharedMemoryUsage { get => _sharedMemoryUsage; set => SetProperty(ref _sharedMemoryUsage, value); }
 
     [ObservableProperty] private string? _gpuVendor;
 
@@ -119,12 +120,12 @@ public partial class GpuViewModel : ViewModelBase
         if (primary != null)
         {
             GpuName = primary.Name ?? "GPU";
-            DriverVersion = primary.DriverVersion ?? "Unknown";
-            DriverDate = primary.DriverDate ?? "Unknown";
-            DirectXVersion = primary.GraphicsApi ?? "N/A";
-            PhysicalLocation = primary.PhysicalLocation ?? "Unknown";
-            MemoryUsage = primary.MemoryUsage ?? "N/A";
-            SharedMemoryUsage = primary.SharedMemoryUsage ?? "N/A";
+            DriverVersion = primary.DriverVersion;
+            DriverDate = primary.DriverDate;
+            DirectXVersion = primary.GraphicsApi;
+            PhysicalLocation = primary.PhysicalLocation;
+            MemoryUsage = primary.MemoryUsage;
+            SharedMemoryUsage = primary.SharedMemoryUsage;
             GpuVendor = primary.Vendor;
         }
     }
@@ -228,32 +229,33 @@ public partial class GpuSubViewModel : ViewModelBase
     private string _gpuName = "";
     public string GpuName { get => _gpuName; set => SetProperty(ref _gpuName, value); }
 
-    private string _utilization = "0%";
-    public string Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
+    // null = no value from the provider, so the row is hidden.
+    private string? _utilization;
+    public string? Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
 
     private double _utilizationValue;
     public double UtilizationValue { get => _utilizationValue; set => SetProperty(ref _utilizationValue, value); }
 
-    private string _temperature = "N/A";
-    public string Temperature { get => _temperature; set => SetProperty(ref _temperature, value); }
+    private string? _temperature;
+    public string? Temperature { get => _temperature; set => SetProperty(ref _temperature, value); }
 
-    private string _driverVersion = "Unknown";
-    public string DriverVersion { get => _driverVersion; set => SetProperty(ref _driverVersion, value); }
+    private string? _driverVersion;
+    public string? DriverVersion { get => _driverVersion; set => SetProperty(ref _driverVersion, value); }
 
-    private string _driverDate = "Unknown";
-    public string DriverDate { get => _driverDate; set => SetProperty(ref _driverDate, value); }
+    private string? _driverDate;
+    public string? DriverDate { get => _driverDate; set => SetProperty(ref _driverDate, value); }
 
-    private string _graphicsApi = "N/A";
-    public string GraphicsApi { get => _graphicsApi; set => SetProperty(ref _graphicsApi, value); }
+    private string? _graphicsApi;
+    public string? GraphicsApi { get => _graphicsApi; set => SetProperty(ref _graphicsApi, value); }
 
-    private string _physicalLocation = "Unknown";
-    public string PhysicalLocation { get => _physicalLocation; set => SetProperty(ref _physicalLocation, value); }
+    private string? _physicalLocation;
+    public string? PhysicalLocation { get => _physicalLocation; set => SetProperty(ref _physicalLocation, value); }
 
-    private string _memoryUsage = "N/A";
-    public string MemoryUsage { get => _memoryUsage; set => SetProperty(ref _memoryUsage, value); }
+    private string? _memoryUsage;
+    public string? MemoryUsage { get => _memoryUsage; set => SetProperty(ref _memoryUsage, value); }
 
-    private string _sharedMemoryUsage = "N/A";
-    public string SharedMemoryUsage { get => _sharedMemoryUsage; set => SetProperty(ref _sharedMemoryUsage, value); }
+    private string? _sharedMemoryUsage;
+    public string? SharedMemoryUsage { get => _sharedMemoryUsage; set => SetProperty(ref _sharedMemoryUsage, value); }
 
     private string? _vendor;
     public string? Vendor { get => _vendor; set => SetProperty(ref _vendor, value); }
@@ -268,12 +270,12 @@ public partial class GpuSubViewModel : ViewModelBase
     {
         HasGpu = true;
         GpuName = g.Name ?? "GPU";
-        DriverVersion = g.DriverVersion ?? "Unknown";
-        DriverDate = g.DriverDate ?? "Unknown";
-        GraphicsApi = g.GraphicsApi ?? "N/A";
-        PhysicalLocation = g.PhysicalLocation ?? "Unknown";
-        MemoryUsage = g.MemoryUsage ?? "N/A";
-        SharedMemoryUsage = g.SharedMemoryUsage ?? "N/A";
+        DriverVersion = g.DriverVersion;
+        DriverDate = g.DriverDate;
+        GraphicsApi = g.GraphicsApi;
+        PhysicalLocation = g.PhysicalLocation;
+        MemoryUsage = g.MemoryUsage;
+        SharedMemoryUsage = g.SharedMemoryUsage;
         Vendor = g.Vendor;
     }
 
@@ -284,12 +286,18 @@ public partial class GpuSubViewModel : ViewModelBase
             UtilizationValue = u;
             Utilization = $"{u}%";
         }
-        if (g.UtilizationText != null) Utilization = g.UtilizationText;
-        if (g.TemperatureC is double t) Temperature = $"{t} °C";
-        if (g.TemperatureText != null) Temperature = g.TemperatureText;
-        if (g.MemoryUsage != null) MemoryUsage = g.MemoryUsage;
-        if (g.SharedMemoryUsage != null) SharedMemoryUsage = g.SharedMemoryUsage;
-        if (g.Vendor != null) Vendor = g.Vendor;
+        if (g.UtilizationText != null && g.Utilization == null)
+            Utilization = g.UtilizationText;
+        if (g.TemperatureC is double t)
+            Temperature = $"{t} °C";
+        if (g.TemperatureText != null)
+            Temperature = g.TemperatureText;
+        if (g.MemoryUsage != null)
+            MemoryUsage = g.MemoryUsage;
+        if (g.SharedMemoryUsage != null)
+            SharedMemoryUsage = g.SharedMemoryUsage;
+        if (g.Vendor != null)
+            Vendor = g.Vendor;
     }
 
     public void UpdateSample(GpuSample s)
@@ -309,15 +317,15 @@ public partial class GpuSubViewModel : ViewModelBase
     {
         HasGpu = false;
         GpuName = EmptyLabel;
-        Utilization = "0%";
+        Utilization = null;
         UtilizationValue = 0;
-        Temperature = "N/A";
-        DriverVersion = "Unknown";
-        DriverDate = "Unknown";
-        GraphicsApi = "N/A";
-        PhysicalLocation = "Unknown";
-        MemoryUsage = "N/A";
-        SharedMemoryUsage = "N/A";
+        Temperature = null;
+        DriverVersion = null;
+        DriverDate = null;
+        GraphicsApi = null;
+        PhysicalLocation = null;
+        MemoryUsage = null;
+        SharedMemoryUsage = null;
         Vendor = null;
     }
 }

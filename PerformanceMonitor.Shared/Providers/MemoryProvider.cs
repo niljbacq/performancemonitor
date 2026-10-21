@@ -23,7 +23,6 @@ public sealed class HardwareInfoMemoryProvider : IMemoryProvider
         double usedGB = Math.Round(usedBytes / (1024.0 * 1024.0 * 1024.0), 1);
         double percent = Math.Round((usedGB / totalGB) * 100, 0);
 
-        // Windows page file via WMI
         string? swap = null;
         if (OperatingSystem.IsWindows())
         {
@@ -48,10 +47,6 @@ public sealed class HardwareInfoMemoryProvider : IMemoryProvider
     }
 }
 
-/// <summary>
-/// Linux memory via /proc/meminfo, including Swap / ZRAM / Active / Inactive / Slab
-/// rows so the desktop Linux Memory tab matches the Android one.
-/// </summary>
 public sealed class LinuxMemoryProvider : IMemoryProvider
 {
     public MemoryUsage GetUsage()
@@ -60,7 +55,7 @@ public sealed class LinuxMemoryProvider : IMemoryProvider
         double total = Kb(kb, "MemTotal");
         double available = kb.ContainsKey("MemAvailable") ? Kb(kb, "MemAvailable") : Kb(kb, "MemFree");
         double used = Math.Max(0, total - available);
-        const double gb = 1024.0 * 1024.0; // meminfo values are kB
+        const double gb = 1024.0 * 1024.0;
 
         bool zram = File.Exists("/proc/swaps") &&
                     File.ReadAllText("/proc/swaps").Contains("zram", StringComparison.OrdinalIgnoreCase);
@@ -110,10 +105,9 @@ public sealed class LinuxMemoryProvider : IMemoryProvider
         double used = total - free;
         string baseText = $"{used / 1024 / 1024:F2} GB / {total / 1024.0 / 1024:F2} GB ({used / total * 100:F0}%)";
 
-        if (!zram) return baseText + " swap";
+        if (!zram) return baseText;
 
-        // ZRAM: read /sys/block/zram*/mm_stat for orig_data_size, compr_data_size, mem_used_total
-        // mm_stat columns: orig_data_size, compr_data_size, mem_used_total, mem_limit, max_used, ...
+        // /sys/block/zram*/mm_stat columns: orig_data_size, compr_data_size, mem_used_total, ...
         string? zramDetail = null;
         try
         {
@@ -129,13 +123,13 @@ public sealed class LinuxMemoryProvider : IMemoryProvider
                     long.TryParse(cols[2], out long memUsed))
                 {
                     double ratio = orig > 0 ? (double)compr / orig * 100 : 0;
-                    zramDetail = $", ZRAM: {orig / 1024.0 / 1024:F1} MB → {compr / 1024.0 / 1024:F1} MB ({ratio:F0}%), {memUsed / 1024.0 / 1024:F1} MB used";
+                    zramDetail = $", ZRAM {orig / 1024.0 / 1024:F1} MB → {compr / 1024.0 / 1024:F1} MB ({ratio:F0}%)";
                     break;
                 }
             }
         }
         catch { }
 
-        return baseText + (zramDetail ?? " zram") + " zram";
+        return zramDetail == null ? baseText : baseText + zramDetail;
     }
 }

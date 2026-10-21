@@ -10,6 +10,7 @@ namespace TaskManager.Providers;
 public sealed class CpuSpecs
 {
     public string? Name { get; set; }
+    public string? MarketingName { get; set; }
     public string? BaseSpeed { get; set; }
     public string? Speed { get; set; }
     public string? Cores { get; set; }
@@ -25,11 +26,10 @@ public sealed class CpuSpecs
     public string? SupportedAbis { get; set; }
     public string? ClusterText { get; set; }
     public string? TemperatureText { get; set; }
-    // Linux Pressure Stall Information for the CPU ("some 0.42% (10s avg)").
     public string? PressureText { get; set; }
 }
 
-public sealed record ProcessStats(int Processes, int Threads, string Handles);
+public sealed record ProcessStats(int? Processes, int? Threads, string? Handles);
 
 public sealed class GpuSpecs
 {
@@ -63,7 +63,6 @@ public sealed class DiskSpecs
     public string? FreeText { get; set; }
     public string? AppsAndDataText { get; set; }
     public string? SystemReservedText { get; set; }
-    // Linux I/O Pressure Stall Information (global, not per-disk).
     public string? PressureText { get; set; }
 }
 
@@ -85,7 +84,6 @@ public sealed record MemoryUsage(double TotalGB, double UsedGB, double Percent)
     public string? ActiveText { get; init; }
     public string? InactiveText { get; init; }
     public string? SlabText { get; init; }
-    // Linux memory Pressure Stall Information ("some 1.20% (10s avg), full 0.30%").
     public string? PressureText { get; init; }
 }
 
@@ -97,19 +95,12 @@ public interface ICpuProvider
     float GetUsagePercent();
     ProcessStats GetProcessStats();
 
-    // Optional capabilities. Defaults keep Windows/Linux behavior unchanged.
     long UptimeMilliseconds => Environment.TickCount64;
     string? UsageUnavailableMessage => null;
     string? ProcessStatsUnavailableMessage => null;
 
     string? PerCoreFrequencyText => null;
-
-    // Distribution of time each core spent at each frequency, e.g.
-    // "3900 MHz 61%, 3800 MHz 12%, ...". null when the kernel does not expose
-    // cpufreq time_in_state (or the files are unreadable).
     string? FrequencyResidencyText => null;
-
-    // Android only: this app's own CPU usage ("3.2% of one core"). null elsewhere.
     string? AppUsageText => null;
 }
 
@@ -130,7 +121,7 @@ public sealed class GpuInfo
     public string? DeviceId { get; set; }
     public string? PciBus { get; set; }
     public string? Name { get; set; }
-    public string? Kind { get; set; }                 // "Integrated", "Dedicated", "Unknown"
+    public string? Kind { get; set; }
     public string? DriverVersion { get; set; }
     public string? DriverDate { get; set; }
     public string? GraphicsApi { get; set; }
@@ -142,8 +133,6 @@ public sealed class GpuInfo
     public string? TemperatureText { get; set; }
     public string? MemoryUsage { get; set; }
     public string? SharedMemoryUsage { get; set; }
-    // Total VRAM in bytes, when the platform can report it (e.g. Windows registry
-    // HardwareInformation.qwMemorySize, which is not capped at 4 GB like AdapterRAM).
     public long? TotalMemoryBytes { get; set; }
 }
 
@@ -164,7 +153,7 @@ public sealed class DiskInfo
     public string? DeviceId { get; set; }
     public string? DiskName { get; set; }
     public string? ModelName { get; set; }
-    public string? Type { get; set; }                 // "SSD", "HDD", "NVMe SSD", "Unknown"
+    public string? Type { get; set; }
     public string? Capacity { get; set; }
     public string? Formatted { get; set; }
     public string? SystemDisk { get; set; }
@@ -179,15 +168,12 @@ public sealed class DiskInfo
     public double? ResponseMs { get; set; }
     public bool NotSupported { get; set; }
     public string? NotSupportedMessage { get; set; }
-    // Linux I/O pressure (global, repeated on each disk for convenience).
     public string? PressureText { get; set; }
 }
 
 public interface IWifiProvider
 {
     WifiDetails GetDetails(string interfaceName);
-
-    // Platforms that can't use NetworkInterface (Android) return a full snapshot here.
     WifiSnapshot? GetSnapshot() => null;
 }
 
@@ -249,17 +235,12 @@ internal static class CommandRunner
 
 public static class ProviderFactory
 {
-    // Heads that need platform APIs (Android) register their providers here
-    // at startup, before any ViewModel is created.
     public static Func<ICpuProvider>? CpuFactory { get; set; }
     public static Func<IGpuProvider>? GpuFactory { get; set; }
     public static Func<IDiskProvider>? DiskFactory { get; set; }
     public static Func<IWifiProvider>? WifiFactory { get; set; }
     public static Func<IMemoryProvider>? MemoryFactory { get; set; }
-    public static Func<ISystemInfoProvider>? SystemFactory { get; set; }
 
-    // Where CSV samples are written. Android points this at its external files
-    // dir (no permission needed); everyone else gets LocalApplicationData.
     public static Func<string?>? LogDirectoryFactory { get; set; }
 
     public static ICpuProvider CreateCpu()
@@ -306,9 +287,6 @@ public static class ProviderFactory
         if (OperatingSystem.IsLinux()) return new LinuxMemoryProvider();
         return new NullMemoryProvider();
     }
-
-    public static ISystemInfoProvider CreateSystem()
-        => SystemFactory?.Invoke() ?? new CrossPlatformSystemInfoProvider();
 
     public static string LogDirectory()
     {

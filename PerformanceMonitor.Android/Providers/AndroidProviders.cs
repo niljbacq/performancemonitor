@@ -1,4 +1,4 @@
-#pragma warning disable CA1422 // deprecated WifiManager APIs (ConnectionInfo, DhcpInfo) still work for the app's own connection
+#pragma warning disable CA1422
 
 using System;
 using System.Collections.Generic;
@@ -37,6 +37,10 @@ internal static class Fmt
     public static string Ip(int ip)
         => ip == 0 ? NA : $"{ip & 0xFF}.{(ip >> 8) & 0xFF}.{(ip >> 16) & 0xFF}.{(ip >> 24) & 0xFF}";
 
+    // Same as Ip but returns null for 0, so callers can hide the row.
+    public static string? IpOrNull(int ip)
+        => ip == 0 ? null : $"{ip & 0xFF}.{(ip >> 8) & 0xFF}.{(ip >> 16) & 0xFF}.{(ip >> 24) & 0xFF}";
+
     public static string? ReadText(string path)
     {
         try
@@ -44,7 +48,7 @@ internal static class Fmt
             string text = File.ReadAllText(path).Trim();
             return text.Length == 0 ? null : text;
         }
-        catch { return null; } // missing or blocked by SELinux
+        catch { return null; }
     }
 
     public static long? ReadLong(string path)
@@ -58,15 +62,20 @@ public sealed class AndroidCpuProvider : ICpuProvider
 
     private ulong _prevIdle;
     private ulong _prevTotal;
-    private bool _primed;
+    private bool _procStatPrimed;
+
+    private long _prevIdleUs;
+    private long _prevWallMs;
+    private bool _cpuidlePrimed;
+
     private string? _usageNote;
-    private long _prevAppTicks;
-    private DateTime _prevAppUtc;
-    private bool _haveAppBaseline;
     private readonly int[] _cores = FindCores();
 
     public long UptimeMilliseconds => Android.OS.SystemClock.ElapsedRealtime();
     public string? UsageUnavailableMessage => _usageNote;
+
+    // System-wide process stats need root on Android; the app-scoped equivalents
+    // are not shown, so all three rows hide.
     public string? ProcessStatsUnavailableMessage => Unavailable;
 
     public CpuSpecs GetSpecs()
@@ -75,13 +84,13 @@ public sealed class AndroidCpuProvider : ICpuProvider
 
         var mins = new List<long>();
         var maxs = new List<long>();
-        var clusters = new Dictionary<(long Min, long Max), int>();   // (min,max) range -> core count
+        var clusters = new Dictionary<(long Min, long Max), int>();
 
         foreach (int core in _cores)
         {
             long? min = ReadKhz(core, "cpuinfo_min_freq");
             long? max = ReadKhz(core, "cpuinfo_max_freq");
-            if (min is not long lo || max is not long hi) continue;   // offline or unreadable core
+            if (min is not long lo || max is not long hi) continue;
 
             mins.Add(lo);
             maxs.Add(hi);
@@ -89,37 +98,38 @@ public sealed class AndroidCpuProvider : ICpuProvider
         }
 
         string? maxFreq = maxs.Count > 0 ? Fmt.Mhz(maxs.Max()) : null;
-        string clusterText = clusters.Count > 0
+        string? clusterText = clusters.Count > 0
             ? string.Join(", ", clusters
                 .OrderByDescending(c => c.Key.Max).ThenByDescending(c => c.Key.Min)
                 .Select(c => $"{c.Value}× {c.Key.Min / 1000}–{c.Key.Max / 1000} MHz"))
-            : Fmt.NA;
+            : null;
 
         var abis = Android.OS.Build.SupportedAbis;
 
+        string? hardware = ReadSocName() ?? Android.OS.Build.Hardware;
+
         return new CpuSpecs
         {
-            Name = ReadSocName() ?? Android.OS.Build.Hardware ?? "Unknown",
+            Name = hardware ?? "Unknown",
+            MarketingName = MarketingNameFor(hardware),
             Cores = logical.ToString(),
             LogicalProcessors = logical.ToString(),
-            BaseSpeed = maxFreq ?? Unavailable,
-            Speed = maxFreq ?? Unavailable,
-            FrequencyMinText = mins.Count > 0 ? Fmt.Mhz(mins.Min()) : Fmt.NA,
-            FrequencyMaxText = maxFreq ?? Fmt.NA,
+            BaseSpeed = maxFreq,
+            Speed = maxFreq,
+            FrequencyMinText = mins.Count > 0 ? Fmt.Mhz(mins.Min()) : null,
+            FrequencyMaxText = maxFreq,
             CpuGovernor = Fmt.ReadText($"{CpuRoot}/cpufreq/policy0/scaling_governor")
-                          ?? Fmt.ReadText($"{CpuRoot}/cpu0/cpufreq/scaling_governor")
-                          ?? Fmt.NA,
-            SupportedAbis = abis != null && abis.Any() ? string.Join(", ", abis) : Fmt.NA,
+                          ?? Fmt.ReadText($"{CpuRoot}/cpu0/cpufreq/scaling_governor"),
+            SupportedAbis = abis != null && abis.Any() ? string.Join(", ", abis) : null,
             ClusterText = clusterText
         };
     }
 
-    // Live value, polled every second by the ViewModel.
     public string? PerCoreFrequencyText
     {
         get
         {
-            if (_cores.Length == 0) return Fmt.NA;
+            if (_cores.Length == 0) return null;
 
             var parts = new List<string>();
             bool any = false;
@@ -129,12 +139,10 @@ public sealed class AndroidCpuProvider : ICpuProvider
                 if (khz is long k) { parts.Add((k / 1000).ToString()); any = true; }
                 else parts.Add("–");
             }
-            return any ? string.Join(", ", parts) + " MHz" : Fmt.NA;
+            return any ? string.Join(", ", parts) + " MHz" : null;
         }
     }
 
-    // Distribution of time each core spent at each P-state. Readable on many
-    // MediaTek/Qualcomm devices via cpufreq "time_in_state"; null when hidden.
     public string? FrequencyResidencyText
     {
         get
@@ -169,78 +177,125 @@ public sealed class AndroidCpuProvider : ICpuProvider
         }
     }
 
-    // This app's own CPU usage from /proc/self/stat (utime+stime delta).
-    public string? AppUsageText
+    // System-wide per-process CPU needs root on Android; this app's own use is not
+    // shown, so the row hides.
+    public string? AppUsageText => null;
+
+    private static string? MarketingNameFor(string? soc)
     {
-        get
+        if (string.IsNullOrWhiteSpace(soc)) return null;
+        string key = soc.Trim().ToLowerInvariant();
+
+        // MediaTek base model numbers (Build.Hardware / ro.board.platform).
+        // mt6789 is shared by G99/G100/G200; the suffix disambiguates.
+        return key switch
         {
-            long? ticks = ReadSelfCpuTicks();
-            if (ticks is not long now) return null;
-
-            DateTime utc = DateTime.UtcNow;
-            if (!_haveAppBaseline)
-            {
-                _prevAppTicks = now;
-                _prevAppUtc = utc;
-                _haveAppBaseline = true;
-                return null;
-            }
-
-            double elapsed = (utc - _prevAppUtc).TotalSeconds;
-            long delta = now - _prevAppTicks;
-            _prevAppTicks = now;
-            _prevAppUtc = utc;
-            if (elapsed <= 0 || delta < 0) return null;
-
-            // _SC_CLK_TCK is 100 on Android/Linux, so ticks/100 = CPU-seconds.
-            double cpuPct = delta / 100.0 / elapsed * 100.0;
-            return $"{cpuPct:F1}% of one core";
-        }
-    }
-
-    private static long? ReadSelfCpuTicks()
-    {
-        try
-        {
-            string stat = File.ReadAllText("/proc/self/stat");
-            // Field 2 (comm) is parenthesised and may contain spaces; everything
-            // after the final ')' is space-delimited starting with the state.
-            int close = stat.LastIndexOf(')');
-            if (close < 0) return null;
-            string[] f = stat[(close + 2)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (f.Length < 13) return null;      // state(0) .. utime(11), stime(12)
-            if (!long.TryParse(f[11], out long utime) || !long.TryParse(f[12], out long stime))
-                return null;
-            return utime + stime;
-        }
-        catch { return null; }
+            "mt6789" or "mt6789v" or "mt6789g" or "mt6789u" => "Helio G99",
+            "mt6789h" or "mt6789i" or "mt6789j" => "Helio G100",
+            "mt6789t" => "Helio G200",
+            "mt6785" or "mt6785v" => "Helio G90",
+            "mt6781" => "Helio G96",
+            "mt6833" => "Dimensity 700",
+            "mt6853" => "Dimensity 720",
+            "mt6873" => "Dimensity 800",
+            "mt6877" => "Dimensity 900",
+            "mt6893" => "Dimensity 1200",
+            "mt6983" => "Dimensity 9000",
+            _ => null
+        };
     }
 
     public float GetUsagePercent()
     {
+        // cpuidle is the working path on Android 8+: /proc/stat is SELinux-blocked
+        // for non-system apps, but per-CPU idle state counters stay readable and
+        // advance in real time. Utilization = 1 - idle/wall.
+        if (TryReadCpuidleUsage(out float cpuidlePercent))
+        {
+            _usageNote = null;
+            return cpuidlePercent;
+        }
+
+        // Fallback for rooted devices or old Android builds where /proc/stat is readable.
+        if (TryReadProcStatUsage(out float statPercent))
+        {
+            _usageNote = null;
+            return statPercent;
+        }
+
+        _usageNote = Unavailable;
+        return 0;
+    }
+
+    // Sums every cpuidle state's "time" (microseconds) across every core, then
+    // compares the delta against elapsed wall time × core count. First call only
+    // primes the baseline.
+    private bool TryReadCpuidleUsage(out float percent)
+    {
+        percent = 0;
+        if (_cores.Length == 0) return false;
+
+        long totalIdleUs = 0;
+        int coresRead = 0;
+        foreach (int core in _cores)
+        {
+            long coreIdle = ReadCoreIdleMicroseconds(core);
+            if (coreIdle < 0) continue;
+            totalIdleUs += coreIdle;
+            coresRead++;
+        }
+        if (coresRead == 0) return false;
+
+        long wallMs = Android.OS.SystemClock.ElapsedRealtime();
+        if (!_cpuidlePrimed)
+        {
+            _prevIdleUs = totalIdleUs;
+            _prevWallMs = wallMs;
+            _cpuidlePrimed = true;
+            return true;
+        }
+
+        long idleDelta = totalIdleUs - _prevIdleUs;
+        long wallDeltaMs = wallMs - _prevWallMs;
+        _prevIdleUs = totalIdleUs;
+        _prevWallMs = wallMs;
+
+        if (idleDelta < 0) idleDelta = 0;
+        if (wallDeltaMs <= 0) return true;
+
+        // Capacity over the window = cores × wall time (cpuidle "time" is µs).
+        double capacityUs = (double)coresRead * wallDeltaMs * 1000.0;
+        double idleFraction = idleDelta / capacityUs;
+        if (idleFraction < 0) idleFraction = 0;
+        if (idleFraction > 1) idleFraction = 1;
+        percent = (float)((1.0 - idleFraction) * 100.0);
+        return true;
+    }
+
+    private bool TryReadProcStatUsage(out float percent)
+    {
+        percent = 0;
         try
         {
             string? first = File.ReadLines("/proc/stat").FirstOrDefault();
-            if (first == null) throw new IOException("empty /proc/stat");
+            if (first == null) return false;
 
             var parts = first.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 5 || parts[0] != "cpu") throw new IOException("unexpected /proc/stat format");
+            if (parts.Length < 5 || parts[0] != "cpu") return false;
 
             ulong idle = ulong.Parse(parts[4]);
             ulong iowait = parts.Length > 5 ? ulong.Parse(parts[5]) : 0;
             ulong total = 0;
-            for (int i = 1; i < Math.Min(parts.Length, 9); i++)   // user..steal; guest fields are already inside user/nice
+            for (int i = 1; i < Math.Min(parts.Length, 9); i++)
                 if (ulong.TryParse(parts[i], out ulong v)) total += v;
 
             ulong idleTotal = idle + iowait;
-            _usageNote = null;
-
-            if (!_primed)
+            if (!_procStatPrimed)
             {
                 _prevIdle = idleTotal;
                 _prevTotal = total;
-                _primed = true;
-                return 0;
+                _procStatPrimed = true;
+                return true;
             }
 
             ulong idleDelta = idleTotal - _prevIdle;
@@ -248,17 +303,35 @@ public sealed class AndroidCpuProvider : ICpuProvider
             _prevIdle = idleTotal;
             _prevTotal = total;
 
-            if (totalDelta == 0) return 0;
-            return (float)Math.Clamp((1.0 - (double)idleDelta / totalDelta) * 100, 0, 100);
+            if (totalDelta == 0) return true;
+            percent = (float)Math.Clamp((1.0 - (double)idleDelta / totalDelta) * 100, 0, 100);
+            return true;
         }
-        catch
-        {
-            _usageNote = Unavailable;   // blocked or unreadable on this Android version
-            return 0;
-        }
+        catch { return false; }
     }
 
-    public ProcessStats GetProcessStats() => new(0, 0, "N/A"); // never shown: ProcessStatsUnavailableMessage is set
+    private static long ReadCoreIdleMicroseconds(int core)
+    {
+        try
+        {
+            string dir = $"{CpuRoot}/cpu{core}/cpuidle";
+            if (!Directory.Exists(dir)) return -1;
+            long sum = 0;
+            bool any = false;
+            foreach (var stateDir in Directory.GetDirectories(dir, "state*"))
+            {
+                string timePath = Path.Combine(stateDir, "time");
+                if (!File.Exists(timePath)) continue;
+                if (!long.TryParse(File.ReadAllText(timePath).Trim(), out long us)) continue;
+                sum += us;
+                any = true;
+            }
+            return any ? sum : -1;
+        }
+        catch { return -1; }
+    }
+
+    public ProcessStats GetProcessStats() => new(null, null, null);
 
     private static int[] FindCores()
     {
@@ -322,7 +395,6 @@ public sealed class AndroidMemoryProvider : IMemoryProvider
         };
     }
 
-    // /proc/meminfo lines look like "SwapTotal:       7864316 kB"
     private static Dictionary<string, long> ReadMemInfo()
     {
         var result = new Dictionary<string, long>();
@@ -341,13 +413,13 @@ public sealed class AndroidMemoryProvider : IMemoryProvider
         return result;
     }
 
-    private static string FormatKb(Dictionary<string, long> kb, string key)
-        => kb.TryGetValue(key, out long v) ? $"{v / 1024.0 / 1024.0:F2} GB" : Fmt.NA;
+    private static string? FormatKb(Dictionary<string, long> kb, string key)
+        => kb.TryGetValue(key, out long v) ? $"{v / 1024.0 / 1024.0:F2} GB" : null;
 
     private static string FormatSwap(Dictionary<string, long> kb)
     {
         if (!kb.TryGetValue("SwapTotal", out long total) || !kb.TryGetValue("SwapFree", out long free))
-            return Fmt.NA;
+            return "Swap unreadable (/proc/meminfo)";
         if (total == 0) return "Not in use";
 
         double used = total - free;
@@ -357,28 +429,16 @@ public sealed class AndroidMemoryProvider : IMemoryProvider
 
 public sealed class AndroidDiskProvider : IDiskProvider
 {
-    private const string Unavailable = "Not available on Android";
-
-    // Per-app disk I/O (no root needed): /proc/self/io exposes the app's own
-    // read/write bytes since process start. We keep a baseline and report the
-    // delta over the sample window, labeled as app-level, so the Disk tab shows
-    // live activity instead of a flat "Not available".
-    private long _prevRead, _prevWrite;
-    private DateTime _prevUtc;
-    private bool _haveBaseline;
-
     public DiskSpecs GetSpecs()
     {
         var s = new DiskSpecs
         {
-            DiskName = "This app (/proc/self/io)",
-            ModelName = "This app's I/O (system requires root)",
-            Type = "Unknown",
-            SystemDisk = Unavailable,
-            PageFile = Unavailable
+            DiskName = "Internal storage",
+            ModelName = "System storage (I/O needs root)",
+            Type = "Unknown"
+            // SystemDisk / PageFile left null; Android has no equivalent.
         };
 
-        // 1) The user-data partition (/data): the part apps can use. This is the old 224 GB figure.
         double? dataTotal = null, dataFree = null;
         try
         {
@@ -389,7 +449,6 @@ public sealed class AndroidDiskProvider : IDiskProvider
         }
         catch { }
 
-        // 2) The whole internal storage device, including system partitions (the 238 GB figure).
         double? total = null;
         bool fromStorageStats = false;
         try
@@ -408,7 +467,7 @@ public sealed class AndroidDiskProvider : IDiskProvider
         }
         catch { }
 
-        total ??= dataTotal;               // fallback: at least show the /data size
+        total ??= dataTotal;
         if (total is not double t) return s;
 
         s.Capacity = $"{Math.Round(t / (1024.0 * 1024 * 1024), 0)} GB";
@@ -424,7 +483,6 @@ public sealed class AndroidDiskProvider : IDiskProvider
             {
                 s.AppsAndDataText = $"{Fmt.Gb(dt - free)} ({(dt - free) / t * 100:F1}%)";
 
-                // Only meaningful when "total" really came from the whole-device figure.
                 if (fromStorageStats && t > dt)
                     s.SystemReservedText = $"{Fmt.Gb(t - dt)} ({(t - dt) / t * 100:F1}%)";
             }
@@ -432,54 +490,13 @@ public sealed class AndroidDiskProvider : IDiskProvider
         return s;
     }
 
-    public DiskSample? Sample()
-    {
-        var io = ReadSelfIo();
-        if (io == null)
-            return new DiskSample { NotSupported = true, NotSupportedMessage = "This app's I/O unreadable (/proc/self/io)" };
-
-        var now = DateTime.UtcNow;
-        DiskSample sample = new();
-        if (_haveBaseline)
-        {
-            double sec = Math.Max(0.001, (now - _prevUtc).TotalSeconds);
-            sample.ReadBytesPerSec = Math.Max(0, io.Value.read - _prevRead) / sec;
-            sample.WriteBytesPerSec = Math.Max(0, io.Value.write - _prevWrite) / sec;
-        }
-        _prevRead = io.Value.read;
-        _prevWrite = io.Value.write;
-        _prevUtc = now;
-        _haveBaseline = true;
-        return sample;
-    }
-
-    private static (long read, long write)? ReadSelfIo()
-    {
-        long read = -1, write = -1;
-        try
-        {
-            foreach (string line in File.ReadLines("/proc/self/io"))
-            {
-                int colon = line.IndexOf(':');
-                if (colon <= 0) continue;
-                string key = line[..colon];
-                if (!long.TryParse(line[(colon + 1)..].Trim(), out long v)) continue;
-                if (key == "read_bytes") read = v;
-                else if (key == "write_bytes") write = v;
-            }
-        }
-        catch { return null; }
-        return read < 0 || write < 0 ? null : (read, write);
-    }
+    // System-wide disk I/O needs root on Android; this app's own I/O is not shown,
+    // so the sample is skipped and the read/write rows hide.
+    public DiskSample? Sample() => null;
 }
 
 public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
 {
-    private const string Unavailable = "Not available on Android";
-
-    // GpuMap/GpuClassifier are internal to the Shared assembly, so Android
-    // (a separate assembly) keeps its own minimal mapping helpers here.
-
     private static GpuSpecs ToSpecs(GpuInfo g) => new()
     {
         Name = g.Name,
@@ -515,36 +532,36 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
         return list.Count == 0 ? new GpuSpecs() : ToSpecs(list[0]);
     }
 
-    public GpuSample? Sample() => new()
-    {
-        UtilizationText = "No public GPU utilization HAL",
-        TemperatureText = "No gpu/mtktsgpu thermal zone",
-        MemoryUsage = "GPU memory not exposed"
-    };
+    public GpuSample? Sample() => null;
 
     public IReadOnlyList<GpuInfo> GetGpuList()
     {
-        // Runs on a background thread (GpuViewModel calls GetGpuList inside Task.Run), which is what EGL needs.
         var gl = GpuInfoEgl.Read();
 
         string soc = $"{Android.OS.Build.Hardware ?? "Unknown"} (SoC / board)";
         string? model = gl?.Renderer
-                        ?? Fmt.ReadText("/sys/kernel/gpu/gpu_model")            // MediaTek, best effort
-                        ?? Fmt.ReadText("/sys/class/kgsl/kgsl-3d0/gpu_model");  // Qualcomm, best effort
+                        ?? Fmt.ReadText("/sys/kernel/gpu/gpu_model")
+                        ?? Fmt.ReadText("/sys/class/kgsl/kgsl-3d0/gpu_model");
 
         return new List<GpuInfo>
         {
             new()
             {
                 Name = string.IsNullOrWhiteSpace(model) ? soc : model,
-                Vendor = gl?.Vendor ?? Fmt.NA,
-                GraphicsApi = gl?.Version ?? Unavailable,
-                DriverVersion = Unavailable,
-                DriverDate = Unavailable,
-                PhysicalLocation = Unavailable,
-                Kind = "Integrated"   // Android exposes only the SoC's integrated GPU
+                Vendor = gl?.Vendor,
+                GraphicsApi = TruncateGlVersion(gl?.Version),
+                // DriverVersion/Date/Location have no Android equivalent; null hides them.
+                Kind = "Integrated"
             }
         };
+    }
+
+    // "OpenGL ES 3.2 v1.r54p1-12eac0..." -> "OpenGL ES 3.2"
+    private static string? TruncateGlVersion(string? version)
+    {
+        if (string.IsNullOrEmpty(version)) return null;
+        int marker = version.IndexOf(" v", StringComparison.Ordinal);
+        return marker > 0 ? version[..marker].Trim() : version.Trim();
     }
 
     public IReadOnlyList<GpuInfo> SampleGpuList()
@@ -553,18 +570,46 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
         foreach (var g in GetGpuList())
         {
             var info = Clone(g);
-            info.UtilizationText = "No public GPU utilization HAL";
-            info.MemoryUsage = "GPU memory not exposed";
+            info.UtilizationText = TryReadGpuUtilization();
+            info.MemoryUsage = null;
 
-            // Best-effort thermal. Prefer a GPU-specific thermal zone; when none
-            // is readable fall back to honest device-level signals (battery
-            // temperature / thermal headroom / thermal status).
             string? temp = ReadGpuTemperature() ?? ReadFallbackThermal();
-            info.TemperatureText = temp ?? "No gpu/mtktsgpu thermal zone";
+            info.TemperatureText = temp;
 
             list.Add(info);
         }
         return list;
+    }
+
+    // Vendor GPU-busy nodes, in order: MediaTek, Adreno, Mali. Values are a
+    // percentage ("42" or "42 %"); anything else is treated as unavailable and the
+    // row hides. Cumulative busy/total counters are deliberately not used — they are
+    // a since-boot average, not current utilization.
+    private static string? TryReadGpuUtilization()
+    {
+        string[] paths =
+        {
+            "/sys/kernel/gpu/gpu_busy",
+            "/sys/kernel/gpu/gpu_load",
+            "/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage",
+            "/sys/class/misc/mali0/device/utilization",
+            "/sys/devices/platform/mali.0/utilization"
+        };
+
+        foreach (string path in paths)
+        {
+            try
+            {
+                if (!File.Exists(path)) continue;
+                string raw = File.ReadAllText(path).Replace("%", "").Trim();
+                if (double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                                    System.Globalization.CultureInfo.InvariantCulture, out double v)
+                    && v >= 0 && v <= 100)
+                    return $"{v:F0}%";
+            }
+            catch { }
+        }
+        return null;
     }
 
     private static string? ReadGpuTemperature()
@@ -579,7 +624,7 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
                 if (type == null || !IsGpuZone(type)) continue;
                 long? raw = Fmt.ReadLong(Path.Combine(zone, "temp"));
                 if (raw == null) continue;
-                double c = raw > 1000 ? raw.Value / 1000.0 : raw.Value; // millidegrees, or already °C
+                double c = raw > 1000 ? raw.Value / 1000.0 : raw.Value;
                 return $"{c:F1} °C ({type})";
             }
             return null;
@@ -587,8 +632,6 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
         catch { return null; }
     }
 
-    // Match by case-insensitive substring on the zone type. SoC vendors use many
-    // names (mtktsgpu, gpu, gpu0, gpuss-0, mali, kgsl, g3d, ...).
     private static bool IsGpuZone(string type)
     {
         string t = type.ToLowerInvariant();
@@ -596,11 +639,8 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
             || t.Contains("mali") || t.Contains("kgsl");
     }
 
-    // Device-level thermal fallbacks when no GPU zone is readable. Both of these
-    // are public APIs: no root, no hidden SELinux state.
     private static string? ReadFallbackThermal()
     {
-        // 1) Battery temperature (tenths of °C) — always available, no permission.
         try
         {
             var filter = new IntentFilter(Intent.ActionBatteryChanged);
@@ -611,7 +651,6 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
         }
         catch { }
 
-        // 2) Thermal headroom (API 30+): <= 0 means the SoC is at its throttle limit.
         try
         {
             if (OperatingSystem.IsAndroidVersionAtLeast(30)
@@ -624,7 +663,6 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
         }
         catch { }
 
-        // 3) Thermal status (API 29+).
         try
         {
             if (OperatingSystem.IsAndroidVersionAtLeast(29)
@@ -690,7 +728,7 @@ public sealed class AndroidWifiProvider : IWifiProvider
 
         string bssid;
         if (!hasLocation) bssid = "Location permission required";
-        else if (string.IsNullOrEmpty(info.BSSID) || info.BSSID == "02:00:00:00:00:00") bssid = Fmt.NA;   // Android's "hidden" placeholder
+        else if (string.IsNullOrEmpty(info.BSSID) || info.BSSID == "02:00:00:00:00:00") bssid = Fmt.NA;
         else bssid = info.BSSID;
 
         int rssi = info.Rssi;
@@ -730,11 +768,11 @@ public sealed class AndroidWifiProvider : IWifiProvider
             WifiStandard = StandardText(info),
             SignalPercentText = rssiValid ? $"{Math.Clamp(2 * (rssi + 100), 0, 100)}%" : Fmt.NA,
             Bssid = bssid,
-            DhcpServer = dhcp == null ? Fmt.NA : Fmt.Ip(dhcp.ServerAddress),
-            Gateway = dhcp == null ? Fmt.NA : Fmt.Ip(dhcp.Gateway),
-            Dns1 = dhcp == null ? Fmt.NA : Fmt.Ip(dhcp.Dns1),
-            Dns2 = dhcp == null ? Fmt.NA : Fmt.Ip(dhcp.Dns2),
-            Netmask = dhcp != null && dhcp.Netmask != 0 ? Fmt.Ip(dhcp.Netmask) : prefixMask ?? Fmt.NA,
+            DhcpServer = dhcp == null ? null : Fmt.IpOrNull(dhcp.ServerAddress),
+            Gateway = dhcp == null ? null : Fmt.IpOrNull(dhcp.Gateway),
+            Dns1 = dhcp == null ? null : Fmt.IpOrNull(dhcp.Dns1),
+            Dns2 = dhcp == null ? null : Fmt.IpOrNull(dhcp.Dns2),
+            Netmask = dhcp != null && dhcp.Netmask != 0 ? Fmt.Ip(dhcp.Netmask) : prefixMask,
             NonMobileTrafficText = nonMobile,
             MobileTrafficText = mobile,
             DownloadText = download,
@@ -749,7 +787,6 @@ public sealed class AndroidWifiProvider : IWifiProvider
         => _context.CheckSelfPermission(Android.Manifest.Permission.AccessFineLocation)
            == Android.Content.PM.Permission.Granted;
 
-    // WifiInfo.WifiStandard needs API 30+. The numbers are ScanResult.WIFI_STANDARD_* constants.
     private static string? StandardText(WifiInfo info)
     {
         if (!OperatingSystem.IsAndroidVersionAtLeast(30)) return null;
@@ -763,22 +800,21 @@ public sealed class AndroidWifiProvider : IWifiProvider
                 6 => "Wi-Fi 6 (802.11ax)",
                 7 => "802.11ad",
                 8 => "Wi-Fi 7 (802.11be)",
-                _ => Fmt.NA
+                _ => null
             };
         }
-        catch { return Fmt.NA; }
+        catch { return null; }
     }
 
     private readonly record struct Traffic(long TotalTx, long TotalRx, long MobileTx, long MobileRx);
 
-    // Device-wide counters since boot. "Non-mobile" = total minus mobile data (mostly Wi-Fi).
     private static Traffic? ReadTraffic()
     {
         try
         {
             long totalTx = TrafficStats.TotalTxBytes;
             long totalRx = TrafficStats.TotalRxBytes;
-            if (totalTx < 0 || totalRx < 0) return null;   // -1 means unsupported
+            if (totalTx < 0 || totalRx < 0) return null;
 
             return new Traffic(
                 totalTx, totalRx,
@@ -788,7 +824,6 @@ public sealed class AndroidWifiProvider : IWifiProvider
         catch { return null; }
     }
 
-    // One pass over the Wi-Fi network's addresses: a global IPv6 address, and the IPv4 netmask from its prefix length.
     private (string ipv6, string? netmask) ReadLinkAddresses()
     {
         string ipv6 = "-";
@@ -801,7 +836,7 @@ public sealed class AndroidWifiProvider : IWifiProvider
             if (network == null) return (ipv6, netmask);
 
             var caps = _connectivity.GetNetworkCapabilities(network);
-            if (caps == null || !caps.HasTransport(TransportType.Wifi)) return (ipv6, netmask);   // active network isn't Wi-Fi
+            if (caps == null || !caps.HasTransport(TransportType.Wifi)) return (ipv6, netmask);
 
             var addresses = _connectivity.GetLinkProperties(network)?.LinkAddresses;
             if (addresses == null) return (ipv6, netmask);
@@ -823,48 +858,5 @@ public sealed class AndroidWifiProvider : IWifiProvider
         if (prefix < 0 || prefix > 32) return Fmt.NA;
         uint mask = prefix == 0 ? 0u : 0xFFFFFFFFu << (32 - prefix);
         return $"{(mask >> 24) & 0xFF}.{(mask >> 16) & 0xFF}.{(mask >> 8) & 0xFF}.{mask & 0xFF}";
-    }
-}
-
-public sealed class AndroidSystemInfoProvider : CrossPlatformSystemInfoProvider
-{
-    public override SystemInfo GetInfo()
-    {
-        var info = base.GetInfo();
-
-        info.Manufacturer = Safe(() => Android.OS.Build.Manufacturer);
-        info.DeviceModel = Safe(() =>
-        {
-            string vendor = Android.OS.Build.Manufacturer ?? "";
-            string model = Android.OS.Build.Model ?? "";
-            string combined = $"{vendor} {model}".Trim();
-            return combined.Length > 0 ? combined : null;
-        });
-        info.DeviceHardware = Safe(() => Android.OS.Build.Hardware);
-        info.AndroidRelease = Safe(() => Android.OS.Build.VERSION.Release);
-        info.AndroidSdk = Safe(() => $"API {(int)Android.OS.Build.VERSION.SdkInt} ({Android.OS.Build.VERSION.SdkInt})");
-        info.AndroidBoard = Safe(() => Android.OS.Build.Board);
-
-        if (OperatingSystem.IsAndroidVersionAtLeast(31))
-        {
-#pragma warning disable CA1416 // guarded by the runtime API-level check above
-            info.SocModel = Safe(() => Android.OS.Build.SocModel);
-#pragma warning restore CA1416
-        }
-
-        // Android is Linux under the hood; it has no distro PRETTY_NAME, so drop
-        // the Linux-only distro row and keep the kernel (which is still useful).
-        info.Distro = null;
-        return info;
-    }
-
-    private static string? Safe(Func<string?> read)
-    {
-        try
-        {
-            string? value = read();
-            return string.IsNullOrWhiteSpace(value) ? null : value;
-        }
-        catch { return null; }
     }
 }

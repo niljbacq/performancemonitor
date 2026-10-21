@@ -11,6 +11,7 @@
         <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
         <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
         <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+        <RollForward>LatestMajor</RollForward>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">

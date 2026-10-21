@@ -41,7 +41,6 @@
             <Setter Property="Background" Value="#2D2D30"/>
         </Style>
 
-        <!-- Phase 6: layout switching -->
         <Style Selector="Grid.mobileLayout">
             <Setter Property="IsVisible" Value="False"/>
         </Style>
@@ -60,7 +59,6 @@
 
     <Grid Classes="desktopLayout" ColumnDefinitions="220, *">
 
-        <!-- Left Sidebar Navigation -->
         <Border Grid.Column="0" Background="#252526" BorderBrush="#333333" BorderThickness="0,0,1,0">
             <StackPanel Margin="10" Spacing="6">
                 <Button Classes="nav" Command="{Binding SelectHomeCommand}" Content="Home" Tag="{Binding IsHomeActive}"/>
@@ -69,15 +67,12 @@
                 <Button Classes="nav" Command="{Binding SelectDiskCommand}" Content="Disk" Tag="{Binding IsDiskActive}"/>
                 <Button Classes="nav" Command="{Binding SelectWifiCommand}" Content="Wi-Fi" Tag="{Binding IsWifiActive}"/>
                 <Button Classes="nav" Command="{Binding SelectGpuCommand}" Content="GPU" Tag="{Binding IsGpuActive}"/>
-                <Button Classes="nav" Command="{Binding SelectSystemCommand}" Content="System" Tag="{Binding IsSystemActive}"/>
             </StackPanel>
         </Border>
 
-        <!-- Main Content Area -->
         <ContentControl Grid.Column="1" Content="{Binding CurrentView}">
             <ContentControl.DataTemplates>
 
-                <!-- Home View Template -->
                 <DataTemplate DataType="{x:Type vm:HomeViewModel}">
                     <Grid RowDefinitions="Auto, *" Margin="24">
                         <StackPanel Grid.Row="0" Margin="0,0,0,20">
@@ -125,19 +120,10 @@
                                     <TextBlock Text="3D utilization, temperature and VRAM usage" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Button>
-
-                            <Button Classes="homeCard" Margin="10,10,0,0"
-                                    Command="{Binding $parent[views:MainView].DataContext.SelectSystemCommand}">
-                                <StackPanel>
-                                    <TextBlock Text="System" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
-                                    <TextBlock Text="OS, kernel, runtime and device details" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </Button>
                         </UniformGrid>
                     </Grid>
                 </DataTemplate>
 
-                <!-- Memory View Template -->
                 <DataTemplate DataType="{x:Type vm:MemoryViewModel}">
                     <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="24">
                         <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="0,0,0,20">
@@ -208,7 +194,6 @@
                     </Grid>
                 </DataTemplate>
 
-                <!-- CPU View Template -->
                 <DataTemplate DataType="{x:Type vm:CpuViewModel}">
                     <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="20">
                         <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,10">
@@ -238,7 +223,7 @@
                                         <TextBlock Text="Utilization" FontSize="12" Foreground="#888888"/>
                                         <TextBlock Text="{Binding Utilization}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1">
+                                    <StackPanel Grid.Column="1" IsVisible="{Binding Speed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <TextBlock Text="Speed" FontSize="12" Foreground="#888888"/>
                                         <TextBlock Text="{Binding Speed}" FontSize="24" FontWeight="SemiBold" Foreground="White"/>
                                     </StackPanel>
@@ -267,14 +252,20 @@
 
                             <Grid Grid.Column="1" ColumnDefinitions="Auto, *">
                                 <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,12,0">
-                                    <TextBlock Text="Base speed:" Foreground="#888888"/>
-                                    <TextBlock Text="Sockets:" Foreground="#888888"/>
+                                    <TextBlock Text="Base speed:" Foreground="#888888"
+                                               IsVisible="{Binding BaseSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="Sockets:" Foreground="#888888"
+                                               IsVisible="{Binding Sockets, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock Text="Cores:" Foreground="#888888"/>
                                     <TextBlock Text="Logical processors:" Foreground="#888888"/>
-                                    <TextBlock Text="Virtualization:" Foreground="#888888"/>
-                                    <TextBlock Text="L1 cache:" Foreground="#888888"/>
-                                    <TextBlock Text="L2 cache:" Foreground="#888888"/>
-                                    <TextBlock Text="L3 cache:" Foreground="#888888"/>
+                                    <TextBlock Text="Virtualization:" Foreground="#888888"
+                                               IsVisible="{Binding Virtualization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="L1 cache:" Foreground="#888888"
+                                               IsVisible="{Binding L1Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="L2 cache:" Foreground="#888888"
+                                               IsVisible="{Binding L2Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="L3 cache:" Foreground="#888888"
+                                               IsVisible="{Binding L3Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock Text="Temperature:" Foreground="#888888"
                                                IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock Text="Pressure (PSI):" Foreground="#888888"
@@ -284,14 +275,20 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" Spacing="4">
-                                    <TextBlock Text="{Binding BaseSpeed}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding Sockets}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding BaseSpeed}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding BaseSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="{Binding Sockets}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding Sockets, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock Text="{Binding Cores}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding LogicalProcessors}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding Virtualization}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding L1Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding L2Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding L3Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Virtualization}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding Virtualization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="{Binding L1Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding L1Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="{Binding L2Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding L2Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="{Binding L3Cache}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
+                                               IsVisible="{Binding L3Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock Text="{Binding TemperatureText}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
                                                IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     <TextBlock Text="{Binding PressureText}" Foreground="White" TextAlignment="Right" TextWrapping="Wrap"
@@ -304,8 +301,6 @@
                     </Grid>
                 </DataTemplate>
 
-                <!-- Disk View Template -->
-                                <!-- Disk View Template (SSD / HDD split) -->
                 <DataTemplate DataType="{x:Type vm:DiskViewModel}">
                     <Grid RowDefinitions="Auto, *" Margin="20">
                         <Grid Grid.Row="0" RowDefinitions="Auto, Auto" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
@@ -320,7 +315,6 @@
 
                         <Grid Grid.Row="1" ColumnDefinitions="*, *">
 
-                            <!-- SSD column -->
                             <Border Grid.Column="0" Background="#252526" CornerRadius="6" Padding="16" Margin="0,0,8,0">
                                 <ScrollViewer>
                                 <StackPanel Spacing="10">
@@ -331,11 +325,13 @@
                                     <TextBlock Text="{Binding Ssd.EmptyLabel}" FontSize="14" Foreground="#888888"
                                                IsVisible="{Binding !Ssd.HasDisk}"/>
 
-                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Ssd.HasDisk}">
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4"
+                                          IsVisible="{Binding Ssd.ActiveTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <TextBlock Text="Active time" FontSize="12" Foreground="#888888"/>
                                         <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
                                     </Grid>
-                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Ssd.HasDisk}">
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8"
+                                            IsVisible="{Binding Ssd.ActiveTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <Grid RowDefinitions="*, Auto">
                                             <ProgressBar Value="{Binding Ssd.ActiveTimeValue}" Minimum="0" Maximum="100" Height="16" Foreground="#82C91E" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
                                             <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,5,0,0">
@@ -345,7 +341,8 @@
                                         </Grid>
                                     </Border>
 
-                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Ssd.HasDisk}">
+                                    <Grid ColumnDefinitions="*, *"
+                                          IsVisible="{Binding Ssd.ReadSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <StackPanel Grid.Column="0">
                                             <TextBlock Text="Read speed" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Ssd.ReadSpeed}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
@@ -357,7 +354,8 @@
                                     </Grid>
 
                                     <Grid ColumnDefinitions="*, *" IsVisible="{Binding Ssd.HasDisk}">
-                                        <StackPanel Grid.Column="0">
+                                        <StackPanel Grid.Column="0"
+                                                    IsVisible="{Binding Ssd.AverageResponseTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="Avg response" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Ssd.AverageResponseTime}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
@@ -370,16 +368,15 @@
                                     <StackPanel Spacing="4" IsVisible="{Binding Ssd.HasDisk}">
                                         <DockPanel><TextBlock Text="Disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.DiskName}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                         <DockPanel><TextBlock Text="Formatted" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.Formatted}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="System disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.SystemDisk}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Page file" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.PageFile}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Used" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.UsedText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Free" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.FreeText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Ssd.SystemDisk, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="System disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.SystemDisk}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Ssd.PageFile, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Page file" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.PageFile}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Ssd.UsedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Used" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.UsedText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Ssd.FreeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Free" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Ssd.FreeText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                     </StackPanel>
                                 </StackPanel>
                                 </ScrollViewer>
                             </Border>
 
-                            <!-- HDD column -->
                             <Border Grid.Column="1" Background="#252526" CornerRadius="6" Padding="16" Margin="8,0,0,0">
                                 <ScrollViewer>
                                 <StackPanel Spacing="10">
@@ -390,11 +387,13 @@
                                     <TextBlock Text="{Binding Hdd.EmptyLabel}" FontSize="14" Foreground="#888888"
                                                IsVisible="{Binding !Hdd.HasDisk}"/>
 
-                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Hdd.HasDisk}">
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4"
+                                          IsVisible="{Binding Hdd.ActiveTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <TextBlock Text="Active time" FontSize="12" Foreground="#888888"/>
                                         <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
                                     </Grid>
-                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Hdd.HasDisk}">
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8"
+                                            IsVisible="{Binding Hdd.ActiveTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <Grid RowDefinitions="*, Auto">
                                             <ProgressBar Value="{Binding Hdd.ActiveTimeValue}" Minimum="0" Maximum="100" Height="16" Foreground="#82C91E" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
                                             <Grid Grid.Row="1" ColumnDefinitions="*, Auto" Margin="0,5,0,0">
@@ -404,7 +403,8 @@
                                         </Grid>
                                     </Border>
 
-                                    <Grid ColumnDefinitions="*, *" IsVisible="{Binding Hdd.HasDisk}">
+                                    <Grid ColumnDefinitions="*, *"
+                                          IsVisible="{Binding Hdd.ReadSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <StackPanel Grid.Column="0">
                                             <TextBlock Text="Read speed" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Hdd.ReadSpeed}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
@@ -416,7 +416,8 @@
                                     </Grid>
 
                                     <Grid ColumnDefinitions="*, *" IsVisible="{Binding Hdd.HasDisk}">
-                                        <StackPanel Grid.Column="0">
+                                        <StackPanel Grid.Column="0"
+                                                    IsVisible="{Binding Hdd.AverageResponseTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="Avg response" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Hdd.AverageResponseTime}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
@@ -429,10 +430,10 @@
                                     <StackPanel Spacing="4" IsVisible="{Binding Hdd.HasDisk}">
                                         <DockPanel><TextBlock Text="Disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.DiskName}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                         <DockPanel><TextBlock Text="Formatted" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.Formatted}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="System disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.SystemDisk}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Page file" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.PageFile}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Used" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.UsedText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Free" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.FreeText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Hdd.SystemDisk, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="System disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.SystemDisk}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Hdd.PageFile, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Page file" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.PageFile}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Hdd.UsedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Used" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.UsedText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Hdd.FreeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Free" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Hdd.FreeText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                     </StackPanel>
                                 </StackPanel>
                                 </ScrollViewer>
@@ -442,7 +443,6 @@
                     </Grid>
                 </DataTemplate>
 
-                <!-- Wi-Fi View Template -->
                 <DataTemplate DataType="{x:Type vm:WifiViewModel}">
                     <Grid RowDefinitions="Auto, Auto, Auto, *" Margin="20">
                         <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,10">
@@ -501,7 +501,6 @@
                                 </StackPanel>
                             </Grid>
 
-                            <!-- Wi-Fi Snapshot Details (from GetSnapshot) -->
                             <StackPanel Grid.Column="1" Margin="20,12,0,0" Spacing="4" IsVisible="{Binding WifiStandard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <DockPanel><TextBlock Text="Standard" Foreground="#888888"/><TextBlock Text="{Binding WifiStandard}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                 <DockPanel IsVisible="{Binding SignalPercent, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Signal %" Foreground="#888888"/><TextBlock Text="{Binding SignalPercent}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
@@ -516,7 +515,6 @@
                     </Grid>
                 </DataTemplate>
 
-                <!-- GPU View Template -->
                 <DataTemplate DataType="{x:Type vm:GpuViewModel}">
                     <Grid RowDefinitions="Auto, *" Margin="20">
                         <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
@@ -526,7 +524,6 @@
 
                         <Grid Grid.Row="1" ColumnDefinitions="*, *">
 
-                            <!-- Integrated column -->
                             <Border Grid.Column="0" Background="#252526" CornerRadius="6" Padding="16" Margin="0,0,8,0">
                                 <ScrollViewer>
                                 <StackPanel Spacing="10">
@@ -537,48 +534,47 @@
                                     <TextBlock Text="{Binding Integrated.EmptyLabel}" FontSize="14" Foreground="#888888"
                                                IsVisible="{Binding !Integrated.HasGpu}"/>
 
-                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Integrated.HasGpu}">
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Integrated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <TextBlock Text="3D Utilization" FontSize="12" Foreground="#888888"/>
                                         <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
                                     </Grid>
-                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Integrated.HasGpu}">
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Integrated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <ProgressBar Value="{Binding Integrated.UtilizationValue}" Minimum="0" Maximum="100" Height="16" Foreground="#00A8FF" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
                                     </Border>
 
                                     <Grid ColumnDefinitions="*, *" IsVisible="{Binding Integrated.HasGpu}">
-                                        <StackPanel Grid.Column="0">
+                                        <StackPanel Grid.Column="0" IsVisible="{Binding Integrated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="Utilization" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Integrated.Utilization}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1">
+                                        <StackPanel Grid.Column="1" IsVisible="{Binding Integrated.Temperature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="GPU Temperature" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Integrated.Temperature}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
                                     </Grid>
 
                                     <Grid ColumnDefinitions="*, *" IsVisible="{Binding Integrated.HasGpu}">
-                                        <StackPanel Grid.Column="0">
+                                        <StackPanel Grid.Column="0" IsVisible="{Binding Integrated.MemoryUsage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="GPU Memory" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Integrated.MemoryUsage}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1">
+                                        <StackPanel Grid.Column="1" IsVisible="{Binding Integrated.SharedMemoryUsage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="Shared Memory" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Integrated.SharedMemoryUsage}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
                                     </Grid>
 
                                     <StackPanel Spacing="4" IsVisible="{Binding Integrated.HasGpu}">
-                                        <DockPanel><TextBlock Text="Driver version" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.DriverVersion}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Driver date" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.DriverDate}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Graphics API" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.GraphicsApi}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Hardware location" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.PhysicalLocation}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Integrated.DriverVersion, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Driver version" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.DriverVersion}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Integrated.DriverDate, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Driver date" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.DriverDate}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Integrated.GraphicsApi, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Graphics API" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.GraphicsApi}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Integrated.PhysicalLocation, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Hardware location" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.PhysicalLocation}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
                                         <DockPanel IsVisible="{Binding Integrated.Vendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Vendor" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Integrated.Vendor}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                     </StackPanel>
                                 </StackPanel>
                                 </ScrollViewer>
                             </Border>
 
-                            <!-- Dedicated column -->
                             <Border Grid.Column="1" Background="#252526" CornerRadius="6" Padding="16" Margin="8,0,0,0">
                                 <ScrollViewer>
                                 <StackPanel Spacing="10">
@@ -589,41 +585,41 @@
                                     <TextBlock Text="{Binding Dedicated.EmptyLabel}" FontSize="14" Foreground="#888888"
                                                IsVisible="{Binding !Dedicated.HasGpu}"/>
 
-                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Dedicated.HasGpu}">
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Dedicated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <TextBlock Text="3D Utilization" FontSize="12" Foreground="#888888"/>
                                         <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
                                     </Grid>
-                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Dedicated.HasGpu}">
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Dedicated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <ProgressBar Value="{Binding Dedicated.UtilizationValue}" Minimum="0" Maximum="100" Height="16" Foreground="#00A8FF" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
                                     </Border>
 
                                     <Grid ColumnDefinitions="*, *" IsVisible="{Binding Dedicated.HasGpu}">
-                                        <StackPanel Grid.Column="0">
+                                        <StackPanel Grid.Column="0" IsVisible="{Binding Dedicated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="Utilization" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Dedicated.Utilization}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1">
+                                        <StackPanel Grid.Column="1" IsVisible="{Binding Dedicated.Temperature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="GPU Temperature" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Dedicated.Temperature}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
                                     </Grid>
 
                                     <Grid ColumnDefinitions="*, *" IsVisible="{Binding Dedicated.HasGpu}">
-                                        <StackPanel Grid.Column="0">
+                                        <StackPanel Grid.Column="0" IsVisible="{Binding Dedicated.MemoryUsage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="GPU Memory" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Dedicated.MemoryUsage}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1">
+                                        <StackPanel Grid.Column="1" IsVisible="{Binding Dedicated.SharedMemoryUsage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="Shared Memory" FontSize="11" Foreground="#888888"/>
                                             <TextBlock Text="{Binding Dedicated.SharedMemoryUsage}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
                                         </StackPanel>
                                     </Grid>
 
                                     <StackPanel Spacing="4" IsVisible="{Binding Dedicated.HasGpu}">
-                                        <DockPanel><TextBlock Text="Driver version" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.DriverVersion}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Driver date" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.DriverDate}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Graphics API" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.GraphicsApi}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                        <DockPanel><TextBlock Text="Hardware location" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.PhysicalLocation}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Dedicated.DriverVersion, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Driver version" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.DriverVersion}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Dedicated.DriverDate, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Driver date" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.DriverDate}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Dedicated.GraphicsApi, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Graphics API" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.GraphicsApi}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
+                                        <DockPanel IsVisible="{Binding Dedicated.PhysicalLocation, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Hardware location" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.PhysicalLocation}" FontSize="12" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
                                         <DockPanel IsVisible="{Binding Dedicated.Vendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Vendor" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Dedicated.Vendor}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                     </StackPanel>
                                 </StackPanel>
@@ -631,46 +627,6 @@
                             </Border>
 
                         </Grid>
-                    </Grid>
-                </DataTemplate>
-
-                <!-- System View Template -->
-                <DataTemplate DataType="{x:Type vm:SystemViewModel}">
-                    <Grid RowDefinitions="Auto, *" Margin="24">
-                        <Grid Grid.Row="0" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
-                            <TextBlock Grid.Column="0" Text="System" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
-                            <TextBlock Grid.Column="1" Text="{Binding OperatingSystem}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                        </Grid>
-
-                        <ScrollViewer Grid.Row="1">
-                            <Grid ColumnDefinitions="*, *">
-                                <StackPanel Grid.Column="0" Spacing="8" Margin="0,0,24,0">
-                                    <TextBlock Text="Platform" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,4"/>
-                                    <DockPanel><TextBlock Text="Operating system" Foreground="#888888"/><TextBlock Text="{Binding OperatingSystem}" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding Distro, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Distribution" Foreground="#888888"/><TextBlock Text="{Binding Distro}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding Kernel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Kernel" Foreground="#888888"/><TextBlock Text="{Binding Kernel}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding MachineName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Machine name" Foreground="#888888"/><TextBlock Text="{Binding MachineName}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding ProcessorCount, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Processor count" Foreground="#888888"/><TextBlock Text="{Binding ProcessorCount}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-
-                                    <TextBlock Text="Android" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,16,0,4" IsVisible="{Binding DeviceModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                    <DockPanel IsVisible="{Binding Manufacturer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Manufacturer" Foreground="#888888"/><TextBlock Text="{Binding Manufacturer}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding DeviceModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Device model" Foreground="#888888"/><TextBlock Text="{Binding DeviceModel}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding DeviceHardware, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Hardware" Foreground="#888888"/><TextBlock Text="{Binding DeviceHardware}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding SocModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="SoC model" Foreground="#888888"/><TextBlock Text="{Binding SocModel}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding AndroidRelease, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Android release" Foreground="#888888"/><TextBlock Text="{Binding AndroidRelease}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding AndroidSdk, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="API level" Foreground="#888888"/><TextBlock Text="{Binding AndroidSdk}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding AndroidBoard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Board" Foreground="#888888"/><TextBlock Text="{Binding AndroidBoard}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                </StackPanel>
-
-                                <StackPanel Grid.Column="1" Spacing="8">
-                                    <TextBlock Text="Runtime" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,4"/>
-                                    <DockPanel IsVisible="{Binding Runtime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text=".NET runtime" Foreground="#888888"/><TextBlock Text="{Binding Runtime}" Foreground="White" HorizontalAlignment="Right" TextWrapping="Wrap"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding Architecture, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="OS architecture" Foreground="#888888"/><TextBlock Text="{Binding Architecture}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding ProcessArchitecture, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Process architecture" Foreground="#888888"/><TextBlock Text="{Binding ProcessArchitecture}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                    <DockPanel IsVisible="{Binding Avalonia, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Avalonia" Foreground="#888888"/><TextBlock Text="{Binding Avalonia}" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
-                                </StackPanel>
-                            </Grid>
-                        </ScrollViewer>
                     </Grid>
                 </DataTemplate>
 
@@ -755,7 +711,6 @@
         <ContentControl Grid.Row="0" Content="{Binding CurrentView}">
             <ContentControl.DataTemplates>
 
-                <!-- HOME -->
                 <DataTemplate DataType="{x:Type vm:HomeViewModel}" x:DataType="vm:HomeViewModel">
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
@@ -764,7 +719,7 @@
                             <Button Classes="mHomeCard" Command="{Binding $parent[views:MainView].DataContext.SelectCpuCommand}">
                                 <StackPanel>
                                     <TextBlock Classes="mCardTitle" Text="CPU"/>
-                                    <TextBlock Classes="mSub" Text="Utilization, speed, cores, uptime"/>
+                                    <TextBlock Classes="mSub" Text="Chipset, cores, frequencies, uptime"/>
                                 </StackPanel>
                             </Button>
                             <Button Classes="mHomeCard" Command="{Binding $parent[views:MainView].DataContext.SelectMemoryCommand}">
@@ -775,8 +730,8 @@
                             </Button>
                             <Button Classes="mHomeCard" Command="{Binding $parent[views:MainView].DataContext.SelectDiskCommand}">
                                 <StackPanel>
-                                    <TextBlock Classes="mCardTitle" Text="Disk"/>
-                                    <TextBlock Classes="mSub" Text="Capacity and activity"/>
+                                    <TextBlock Classes="mCardTitle" Text="Storage"/>
+                                    <TextBlock Classes="mSub" Text="Internal storage and I/O"/>
                                 </StackPanel>
                             </Button>
                             <Button Classes="mHomeCard" Command="{Binding $parent[views:MainView].DataContext.SelectWifiCommand}">
@@ -791,67 +746,74 @@
                                     <TextBlock Classes="mSub" Text="Graphics device details"/>
                                 </StackPanel>
                             </Button>
-                            <Button Classes="mHomeCard" Command="{Binding $parent[views:MainView].DataContext.SelectSystemCommand}">
-                                <StackPanel>
-                                    <TextBlock Classes="mCardTitle" Text="System"/>
-                                    <TextBlock Classes="mSub" Text="OS, kernel, runtime, device"/>
-                                </StackPanel>
-                            </Button>
                         </StackPanel>
                     </ScrollViewer>
                 </DataTemplate>
 
-                <!-- CPU -->
                 <DataTemplate DataType="{x:Type vm:CpuViewModel}" x:DataType="vm:CpuViewModel">
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
                             <TextBlock Classes="mTitle" Text="CPU"/>
                             <TextBlock Classes="mSub" Text="{Binding CpuName}"/>
-                            <Border Classes="mCard">
+
+                            <!-- Utilization card: only when the OS actually reports CPU% -->
+                            <Border Classes="mCard" IsVisible="{Binding HasUtilization}">
                                 <StackPanel Spacing="6">
                                     <TextBlock Classes="mLabel" Margin="0" Text="Utilization"/>
                                     <TextBlock Classes="mBig" Text="{Binding Utilization}"/>
                                     <ProgressBar Minimum="0" Maximum="100" Value="{Binding UtilizationValue}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding HardwareName}"
+                                               IsVisible="{Binding HardwareName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 </StackPanel>
                             </Border>
+
+                            <!-- Chipset card: shown when utilization is blocked (Android) -->
+                            <Border Classes="mCard" IsVisible="{Binding !HasUtilization}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="mLabel" Margin="0" Text="Chipset"/>
+                                    <TextBlock Classes="mBig" Text="{Binding CpuName}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding ClusterText}"
+                                               IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                </StackPanel>
+                            </Border>
+
                             <Border Classes="mCard">
                                 <StackPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Speed"/><TextBlock Classes="mValue" Text="{Binding Speed}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Base speed"/><TextBlock Classes="mValue" Text="{Binding BaseSpeed}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Speed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Speed"/><TextBlock Classes="mValue" Text="{Binding Speed}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding BaseSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Base speed"/><TextBlock Classes="mValue" Text="{Binding BaseSpeed}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Cores"/><TextBlock Classes="mValue" Text="{Binding Cores}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Logical processors"/><TextBlock Classes="mValue" Text="{Binding LogicalProcessors}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Sockets"/><TextBlock Classes="mValue" Text="{Binding Sockets}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Virtualization"/><TextBlock Classes="mValue" Text="{Binding Virtualization}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Sockets, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Sockets"/><TextBlock Classes="mValue" Text="{Binding Sockets}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Virtualization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Virtualization"/><TextBlock Classes="mValue" Text="{Binding Virtualization}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Uptime"/><TextBlock Classes="mValue" Text="{Binding Uptime}"/></DockPanel>
                                     <DockPanel Classes="mRow" IsVisible="{Binding TemperatureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding TemperatureText}"/></DockPanel>
                                     <DockPanel Classes="mRow" IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Pressure (PSI)"/><TextBlock Classes="mValue" Text="{Binding PressureText}"/></DockPanel>
-<TextBlock Classes="mLabel" Margin="0,8,0,0" Text="Android details"
-           IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-<DockPanel Classes="mRow" IsVisible="{Binding FrequencyMinText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Min frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMinText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding FrequencyMaxText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Max frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMaxText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding CpuGovernor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Governor"/><TextBlock Classes="mValue" Text="{Binding CpuGovernor}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding SupportedAbis, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Supported ABIs"/><TextBlock Classes="mValue" Text="{Binding SupportedAbis}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Clusters"/><TextBlock Classes="mValue" Text="{Binding ClusterText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding PerCoreFrequencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Per-core now"/><TextBlock Classes="mValue" Text="{Binding PerCoreFrequencyText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding FrequencyResidencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Frequency residency"/><TextBlock Classes="mValue" Text="{Binding FrequencyResidencyText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding AppUsageText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="This app CPU"/><TextBlock Classes="mValue" Text="{Binding AppUsageText}"/></DockPanel>
+                                    <TextBlock Classes="mLabel" Margin="0,8,0,0" Text="Android details"
+                                               IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding FrequencyMinText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Min frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMinText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding FrequencyMaxText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Max frequency"/><TextBlock Classes="mValue" Text="{Binding FrequencyMaxText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding CpuGovernor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Governor"/><TextBlock Classes="mValue" Text="{Binding CpuGovernor}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding SupportedAbis, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Supported ABIs"/><TextBlock Classes="mValue" Text="{Binding SupportedAbis}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding ClusterText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Clusters"/><TextBlock Classes="mValue" Text="{Binding ClusterText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding PerCoreFrequencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Per-core now"/><TextBlock Classes="mValue" Text="{Binding PerCoreFrequencyText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding FrequencyResidencyText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Frequency residency"/><TextBlock Classes="mValue" Text="{Binding FrequencyResidencyText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding AppUsageText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="This app CPU"/><TextBlock Classes="mValue" Text="{Binding AppUsageText}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                             <Border Classes="mCard">
                                 <StackPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Processes"/><TextBlock Classes="mValue" Text="{Binding Processes}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Threads"/><TextBlock Classes="mValue" Text="{Binding Threads}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Handles"/><TextBlock Classes="mValue" Text="{Binding Handles}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="L1 cache"/><TextBlock Classes="mValue" Text="{Binding L1Cache}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="L2 cache"/><TextBlock Classes="mValue" Text="{Binding L2Cache}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="L3 cache"/><TextBlock Classes="mValue" Text="{Binding L3Cache}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Processes, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Processes"/><TextBlock Classes="mValue" Text="{Binding Processes}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Threads, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Threads"/><TextBlock Classes="mValue" Text="{Binding Threads}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Handles, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Handles"/><TextBlock Classes="mValue" Text="{Binding Handles}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding L1Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="L1 cache"/><TextBlock Classes="mValue" Text="{Binding L1Cache}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding L2Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="L2 cache"/><TextBlock Classes="mValue" Text="{Binding L2Cache}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding L3Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="L3 cache"/><TextBlock Classes="mValue" Text="{Binding L3Cache}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </DataTemplate>
 
-                <!-- MEMORY -->
                 <DataTemplate DataType="{x:Type vm:MemoryViewModel}" x:DataType="vm:MemoryViewModel">
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
@@ -867,23 +829,21 @@
                                 <StackPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding UsedMemoryText}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Total"/><TextBlock Classes="mValue" Text="{Binding TotalMemoryText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding SwapText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Swap / ZRAM"/><TextBlock Classes="mValue" Text="{Binding SwapText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding ActiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Active"/><TextBlock Classes="mValue" Text="{Binding ActiveText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding InactiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Inactive"/><TextBlock Classes="mValue" Text="{Binding InactiveText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding SlabText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Slab (kernel)"/><TextBlock Classes="mValue" Text="{Binding SlabText}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Pressure (PSI)"/><TextBlock Classes="mValue" Text="{Binding PressureText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding SwapText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Swap / ZRAM"/><TextBlock Classes="mValue" Text="{Binding SwapText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding ActiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Active"/><TextBlock Classes="mValue" Text="{Binding ActiveText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding InactiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Inactive"/><TextBlock Classes="mValue" Text="{Binding InactiveText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding SlabText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Slab (kernel)"/><TextBlock Classes="mValue" Text="{Binding SlabText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Pressure (PSI)"/><TextBlock Classes="mValue" Text="{Binding PressureText}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </DataTemplate>
 
-                <!-- DISK -->
-                                <!-- DISK (mobile — stacked SSD/HDD) -->
                 <DataTemplate DataType="{x:Type vm:DiskViewModel}" x:DataType="vm:DiskViewModel">
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
-                            <TextBlock Classes="mTitle" Text="Disk"/>
+                            <TextBlock Classes="mTitle" Text="Storage"/>
 
                             <Border Classes="mCard" IsVisible="{Binding IoPressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <DockPanel>
@@ -892,52 +852,79 @@
                                 </DockPanel>
                             </Border>
 
+                            <!-- Internal storage card: hidden HDD state, speed bars for read/write -->
                             <Border Classes="mCard">
                                 <StackPanel Spacing="8">
-                                    <TextBlock Classes="mCardTitle" Text="SSD"/>
+                                    <TextBlock Classes="mCardTitle" Text="Internal Storage"/>
                                     <TextBlock Classes="mSub" Text="{Binding Ssd.ModelName}" IsVisible="{Binding Ssd.HasDisk}"/>
                                     <TextBlock Classes="mSub" Text="{Binding Ssd.EmptyLabel}" IsVisible="{Binding !Ssd.HasDisk}"/>
 
-                                    <StackPanel Spacing="6" IsVisible="{Binding Ssd.HasDisk}">
-                                        <TextBlock Classes="mLabel" Margin="0" Text="Active time"/>
-                                        <TextBlock Classes="mBig" Text="{Binding Ssd.ActiveTime}"/>
-                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding Ssd.ActiveTimeValue}"/>
+                                    <StackPanel Spacing="8" IsVisible="{Binding Ssd.HasDisk}">
+                                        <!-- Read speed bar (10 MB/s = 10485760 bytes/s max) -->
+                                        <StackPanel Spacing="4"
+                                                    IsVisible="{Binding Ssd.ReadSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <DockPanel>
+                                                <TextBlock Classes="mLabel" Margin="0" Text="Read speed"/>
+                                                <TextBlock Classes="mValue" Text="{Binding Ssd.ReadSpeed}"/>
+                                            </DockPanel>
+                                            <ProgressBar Minimum="0" Maximum="10485760" Value="{Binding Ssd.ReadSpeedBytes}" Height="6"/>
+                                        </StackPanel>
 
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Read speed"/><TextBlock Classes="mValue" Text="{Binding Ssd.ReadSpeed}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Write speed"/><TextBlock Classes="mValue" Text="{Binding Ssd.WriteSpeed}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Avg. response"/><TextBlock Classes="mValue" Text="{Binding Ssd.AverageResponseTime}"/></DockPanel>
+                                        <!-- Write speed bar -->
+                                        <StackPanel Spacing="4"
+                                                    IsVisible="{Binding Ssd.WriteSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <DockPanel>
+                                                <TextBlock Classes="mLabel" Margin="0" Text="Write speed"/>
+                                                <TextBlock Classes="mValue" Text="{Binding Ssd.WriteSpeed}"/>
+                                            </DockPanel>
+                                            <ProgressBar Minimum="0" Maximum="10485760" Value="{Binding Ssd.WriteSpeedBytes}" Height="6"/>
+                                        </StackPanel>
+
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Ssd.AverageResponseTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Avg. response"/><TextBlock Classes="mValue" Text="{Binding Ssd.AverageResponseTime}"/></DockPanel>
                                         <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Disk"/><TextBlock Classes="mValue" Text="{Binding Ssd.DiskName}"/></DockPanel>
                                         <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Capacity"/><TextBlock Classes="mValue" Text="{Binding Ssd.Capacity}"/></DockPanel>
                                         <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Formatted"/><TextBlock Classes="mValue" Text="{Binding Ssd.Formatted}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="System disk"/><TextBlock Classes="mValue" Text="{Binding Ssd.SystemDisk}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding Ssd.PageFile}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding Ssd.UsedText}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding Ssd.FreeText}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Ssd.SystemDisk, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="System disk"/><TextBlock Classes="mValue" Text="{Binding Ssd.SystemDisk}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Ssd.PageFile, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding Ssd.PageFile}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Ssd.UsedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding Ssd.UsedText}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Ssd.FreeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding Ssd.FreeText}"/></DockPanel>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
 
-                            <Border Classes="mCard">
+                            <!-- HDD card: only shown if a real HDD is present (never on Android) -->
+                            <Border Classes="mCard" IsVisible="{Binding Hdd.HasDisk}">
                                 <StackPanel Spacing="8">
                                     <TextBlock Classes="mCardTitle" Text="HDD"/>
-                                    <TextBlock Classes="mSub" Text="{Binding Hdd.ModelName}" IsVisible="{Binding Hdd.HasDisk}"/>
-                                    <TextBlock Classes="mSub" Text="{Binding Hdd.EmptyLabel}" IsVisible="{Binding !Hdd.HasDisk}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Hdd.ModelName}"/>
 
-                                    <StackPanel Spacing="6" IsVisible="{Binding Hdd.HasDisk}">
-                                        <TextBlock Classes="mLabel" Margin="0" Text="Active time"/>
-                                        <TextBlock Classes="mBig" Text="{Binding Hdd.ActiveTime}"/>
-                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding Hdd.ActiveTimeValue}"/>
+                                    <StackPanel Spacing="8">
+                                        <StackPanel Spacing="4"
+                                                    IsVisible="{Binding Hdd.ReadSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <DockPanel>
+                                                <TextBlock Classes="mLabel" Margin="0" Text="Read speed"/>
+                                                <TextBlock Classes="mValue" Text="{Binding Hdd.ReadSpeed}"/>
+                                            </DockPanel>
+                                            <ProgressBar Minimum="0" Maximum="10485760" Value="{Binding Hdd.ReadSpeedBytes}" Height="6"/>
+                                        </StackPanel>
 
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Read speed"/><TextBlock Classes="mValue" Text="{Binding Hdd.ReadSpeed}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Write speed"/><TextBlock Classes="mValue" Text="{Binding Hdd.WriteSpeed}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Avg. response"/><TextBlock Classes="mValue" Text="{Binding Hdd.AverageResponseTime}"/></DockPanel>
+                                        <StackPanel Spacing="4"
+                                                    IsVisible="{Binding Hdd.WriteSpeed, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <DockPanel>
+                                                <TextBlock Classes="mLabel" Margin="0" Text="Write speed"/>
+                                                <TextBlock Classes="mValue" Text="{Binding Hdd.WriteSpeed}"/>
+                                            </DockPanel>
+                                            <ProgressBar Minimum="0" Maximum="10485760" Value="{Binding Hdd.WriteSpeedBytes}" Height="6"/>
+                                        </StackPanel>
+
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Hdd.AverageResponseTime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Avg. response"/><TextBlock Classes="mValue" Text="{Binding Hdd.AverageResponseTime}"/></DockPanel>
                                         <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Disk"/><TextBlock Classes="mValue" Text="{Binding Hdd.DiskName}"/></DockPanel>
                                         <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Capacity"/><TextBlock Classes="mValue" Text="{Binding Hdd.Capacity}"/></DockPanel>
                                         <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Formatted"/><TextBlock Classes="mValue" Text="{Binding Hdd.Formatted}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="System disk"/><TextBlock Classes="mValue" Text="{Binding Hdd.SystemDisk}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding Hdd.PageFile}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding Hdd.UsedText}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding Hdd.FreeText}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Hdd.SystemDisk, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="System disk"/><TextBlock Classes="mValue" Text="{Binding Hdd.SystemDisk}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Hdd.PageFile, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding Hdd.PageFile}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Hdd.UsedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding Hdd.UsedText}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Hdd.FreeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding Hdd.FreeText}"/></DockPanel>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -945,137 +932,105 @@
                     </ScrollViewer>
                 </DataTemplate>
 
-                <!-- WI-FI -->
                 <DataTemplate DataType="{x:Type vm:WifiViewModel}" x:DataType="vm:WifiViewModel">
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
                             <TextBlock Classes="mTitle" Text="Wi-Fi"/>
-                            <TextBlock Classes="mSub" Text="{Binding AdapterName}"/>
+                            <TextBlock Classes="mSub" Text="{Binding Ssid}"/>
+
+                            <!-- Send / Receive bars (100 Mbps = 100000 Kbps max) -->
                             <Border Classes="mCard">
-                                <StackPanel Spacing="6">
-                                    <TextBlock Classes="mLabel" Margin="0" Text="Status"/>
-                                    <TextBlock Classes="mBig" Text="{Binding Status}"/>
-                                    <TextBlock Classes="mSub" Text="{Binding Ssid}"/>
+                                <StackPanel Spacing="10">
+                                    <StackPanel Spacing="4">
+                                        <DockPanel>
+                                            <TextBlock Classes="mLabel" Margin="0" Text="Send"/>
+                                            <TextBlock Classes="mValue" Text="{Binding SendSpeed}"/>
+                                        </DockPanel>
+                                        <ProgressBar Minimum="0" Maximum="100000" Value="{Binding SendValue}" Height="6"/>
+                                    </StackPanel>
+                                    <StackPanel Spacing="4">
+                                        <DockPanel>
+                                            <TextBlock Classes="mLabel" Margin="0" Text="Receive"/>
+                                            <TextBlock Classes="mValue" Text="{Binding ReceiveSpeed}"/>
+                                        </DockPanel>
+                                        <ProgressBar Minimum="0" Maximum="100000" Value="{Binding ReceiveValue}" Height="6"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
+
                             <Border Classes="mCard">
                                 <StackPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Send"/><TextBlock Classes="mValue" Text="{Binding SendSpeed}"/></DockPanel>
-                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Receive"/><TextBlock Classes="mValue" Text="{Binding ReceiveSpeed}"/></DockPanel>
+                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Status"/><TextBlock Classes="mValue" Text="{Binding Status}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Signal"/><TextBlock Classes="mValue" Text="{Binding SignalStrength}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Connection"/><TextBlock Classes="mValue" Text="{Binding ConnectionType}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="IPv4"/><TextBlock Classes="mValue" Text="{Binding Ipv4Address}"/></DockPanel>
                                     <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="IPv6"/><TextBlock Classes="mValue" Text="{Binding Ipv6Address}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding WifiStandard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Wi-Fi standard"/><TextBlock Classes="mValue" Text="{Binding WifiStandard}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding SignalPercent, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Signal %"/><TextBlock Classes="mValue" Text="{Binding SignalPercent}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding Bssid, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="BSSID"/><TextBlock Classes="mValue" Text="{Binding Bssid}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding DhcpServer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DHCP server"/><TextBlock Classes="mValue" Text="{Binding DhcpServer}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding Gateway, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Gateway"/><TextBlock Classes="mValue" Text="{Binding Gateway}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding Dns1, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DNS 1"/><TextBlock Classes="mValue" Text="{Binding Dns1}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding Dns2, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DNS 2"/><TextBlock Classes="mValue" Text="{Binding Dns2}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding Netmask, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Netmask"/><TextBlock Classes="mValue" Text="{Binding Netmask}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding NonMobileTraffic, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Non-mobile traffic"/><TextBlock Classes="mValue" Text="{Binding NonMobileTraffic}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding MobileTraffic, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Mobile traffic"/><TextBlock Classes="mValue" Text="{Binding MobileTraffic}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding DownloadedSinceBoot, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Downloaded since boot"/><TextBlock Classes="mValue" Text="{Binding DownloadedSinceBoot}"/></DockPanel>
-<DockPanel Classes="mRow" IsVisible="{Binding UploadedSinceBoot, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Uploaded since boot"/><TextBlock Classes="mValue" Text="{Binding UploadedSinceBoot}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding WifiStandard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Wi-Fi standard"/><TextBlock Classes="mValue" Text="{Binding WifiStandard}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding SignalPercent, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Signal %"/><TextBlock Classes="mValue" Text="{Binding SignalPercent}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Bssid, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="BSSID"/><TextBlock Classes="mValue" Text="{Binding Bssid}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding DhcpServer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DHCP server"/><TextBlock Classes="mValue" Text="{Binding DhcpServer}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Gateway, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Gateway"/><TextBlock Classes="mValue" Text="{Binding Gateway}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Dns1, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DNS 1"/><TextBlock Classes="mValue" Text="{Binding Dns1}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Dns2, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="DNS 2"/><TextBlock Classes="mValue" Text="{Binding Dns2}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding Netmask, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Netmask"/><TextBlock Classes="mValue" Text="{Binding Netmask}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding NonMobileTraffic, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Non-mobile traffic"/><TextBlock Classes="mValue" Text="{Binding NonMobileTraffic}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding MobileTraffic, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Mobile traffic"/><TextBlock Classes="mValue" Text="{Binding MobileTraffic}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding DownloadedSinceBoot, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Downloaded since boot"/><TextBlock Classes="mValue" Text="{Binding DownloadedSinceBoot}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding UploadedSinceBoot, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Uploaded since boot"/><TextBlock Classes="mValue" Text="{Binding UploadedSinceBoot}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </DataTemplate>
 
-                <!-- GPU -->
                 <DataTemplate DataType="{x:Type vm:GpuViewModel}" x:DataType="vm:GpuViewModel">
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
                             <TextBlock Classes="mTitle" Text="GPU"/>
                             <TextBlock Classes="mSub" Text="{Binding GpuName}"/>
 
-                            <!-- Integrated card -->
                             <Border Classes="mCard">
                                 <StackPanel Spacing="6">
                                     <TextBlock Classes="mLabel" Margin="0" Text="Integrated" FontWeight="SemiBold" Foreground="White"/>
                                     <TextBlock Classes="mSub" Text="{Binding Integrated.GpuName}" IsVisible="{Binding Integrated.HasGpu}"/>
                                     <TextBlock Classes="mSub" Text="{Binding Integrated.EmptyLabel}" IsVisible="{Binding !Integrated.HasGpu}"/>
                                     <StackPanel Spacing="6" IsVisible="{Binding Integrated.HasGpu}">
-                                        <TextBlock Classes="mLabel" Margin="0" Text="Utilization"/>
-                                        <TextBlock Classes="mBig" Text="{Binding Integrated.Utilization}"/>
-                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding Integrated.UtilizationValue}"/>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding Integrated.Temperature}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="GPU memory"/><TextBlock Classes="mValue" Text="{Binding Integrated.MemoryUsage}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Shared memory"/><TextBlock Classes="mValue" Text="{Binding Integrated.SharedMemoryUsage}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver version"/><TextBlock Classes="mValue" Text="{Binding Integrated.DriverVersion}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver date"/><TextBlock Classes="mValue" Text="{Binding Integrated.DriverDate}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Graphics API"/><TextBlock Classes="mValue" Text="{Binding Integrated.GraphicsApi}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Location"/><TextBlock Classes="mValue" Text="{Binding Integrated.PhysicalLocation}"/></DockPanel>
+                                        <StackPanel Spacing="6" IsVisible="{Binding Integrated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <TextBlock Classes="mLabel" Margin="0" Text="Utilization"/>
+                                            <TextBlock Classes="mBig" Text="{Binding Integrated.Utilization}"/>
+                                            <ProgressBar Minimum="0" Maximum="100" Value="{Binding Integrated.UtilizationValue}"/>
+                                        </StackPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Integrated.Temperature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding Integrated.Temperature}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Integrated.MemoryUsage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="GPU memory"/><TextBlock Classes="mValue" Text="{Binding Integrated.MemoryUsage}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Integrated.SharedMemoryUsage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Shared memory"/><TextBlock Classes="mValue" Text="{Binding Integrated.SharedMemoryUsage}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Integrated.DriverVersion, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Driver version"/><TextBlock Classes="mValue" Text="{Binding Integrated.DriverVersion}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Integrated.DriverDate, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Driver date"/><TextBlock Classes="mValue" Text="{Binding Integrated.DriverDate}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Integrated.GraphicsApi, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Graphics API"/><TextBlock Classes="mValue" Text="{Binding Integrated.GraphicsApi}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Integrated.PhysicalLocation, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Location"/><TextBlock Classes="mValue" Text="{Binding Integrated.PhysicalLocation}"/></DockPanel>
                                         <DockPanel Classes="mRow" IsVisible="{Binding Integrated.Vendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Vendor"/><TextBlock Classes="mValue" Text="{Binding Integrated.Vendor}"/></DockPanel>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
 
-                            <!-- Dedicated card -->
-                            <Border Classes="mCard">
+                            <Border Classes="mCard" IsVisible="{Binding Dedicated.HasGpu}">
                                 <StackPanel Spacing="6">
                                     <TextBlock Classes="mLabel" Margin="0" Text="Dedicated" FontWeight="SemiBold" Foreground="White"/>
-                                    <TextBlock Classes="mSub" Text="{Binding Dedicated.GpuName}" IsVisible="{Binding Dedicated.HasGpu}"/>
-                                    <TextBlock Classes="mSub" Text="{Binding Dedicated.EmptyLabel}" IsVisible="{Binding !Dedicated.HasGpu}"/>
-                                    <StackPanel Spacing="6" IsVisible="{Binding Dedicated.HasGpu}">
-                                        <TextBlock Classes="mLabel" Margin="0" Text="Utilization"/>
-                                        <TextBlock Classes="mBig" Text="{Binding Dedicated.Utilization}"/>
-                                        <ProgressBar Minimum="0" Maximum="100" Value="{Binding Dedicated.UtilizationValue}"/>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding Dedicated.Temperature}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="GPU memory"/><TextBlock Classes="mValue" Text="{Binding Dedicated.MemoryUsage}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Shared memory"/><TextBlock Classes="mValue" Text="{Binding Dedicated.SharedMemoryUsage}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver version"/><TextBlock Classes="mValue" Text="{Binding Dedicated.DriverVersion}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Driver date"/><TextBlock Classes="mValue" Text="{Binding Dedicated.DriverDate}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Graphics API"/><TextBlock Classes="mValue" Text="{Binding Dedicated.GraphicsApi}"/></DockPanel>
-                                        <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Location"/><TextBlock Classes="mValue" Text="{Binding Dedicated.PhysicalLocation}"/></DockPanel>
+                                    <TextBlock Classes="mSub" Text="{Binding Dedicated.GpuName}"/>
+                                    <StackPanel Spacing="6">
+                                        <StackPanel Spacing="6" IsVisible="{Binding Dedicated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <TextBlock Classes="mLabel" Margin="0" Text="Utilization"/>
+                                            <TextBlock Classes="mBig" Text="{Binding Dedicated.Utilization}"/>
+                                            <ProgressBar Minimum="0" Maximum="100" Value="{Binding Dedicated.UtilizationValue}"/>
+                                        </StackPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.Temperature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Temperature"/><TextBlock Classes="mValue" Text="{Binding Dedicated.Temperature}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.MemoryUsage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="GPU memory"/><TextBlock Classes="mValue" Text="{Binding Dedicated.MemoryUsage}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.SharedMemoryUsage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Shared memory"/><TextBlock Classes="mValue" Text="{Binding Dedicated.SharedMemoryUsage}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.DriverVersion, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Driver version"/><TextBlock Classes="mValue" Text="{Binding Dedicated.DriverVersion}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.DriverDate, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Driver date"/><TextBlock Classes="mValue" Text="{Binding Dedicated.DriverDate}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.GraphicsApi, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Graphics API"/><TextBlock Classes="mValue" Text="{Binding Dedicated.GraphicsApi}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.PhysicalLocation, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Location"/><TextBlock Classes="mValue" Text="{Binding Dedicated.PhysicalLocation}"/></DockPanel>
                                         <DockPanel Classes="mRow" IsVisible="{Binding Dedicated.Vendor, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Vendor"/><TextBlock Classes="mValue" Text="{Binding Dedicated.Vendor}"/></DockPanel>
                                     </StackPanel>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </ScrollViewer>
-                </DataTemplate>
-
-                <!-- SYSTEM -->
-                <DataTemplate DataType="{x:Type vm:SystemViewModel}" x:DataType="vm:SystemViewModel">
-                    <ScrollViewer>
-                        <StackPanel Margin="16" Spacing="12">
-                            <TextBlock Classes="mTitle" Text="System"/>
-                            <TextBlock Classes="mSub" Text="{Binding OperatingSystem}"/>
-
-                            <Border Classes="mCard">
-                                <StackPanel>
-                                    <TextBlock Classes="mCardTitle" Margin="0,0,0,6" Text="Platform"/>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding OperatingSystem, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Operating system"/><TextBlock Classes="mValue" Text="{Binding OperatingSystem}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Distro, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Distribution"/><TextBlock Classes="mValue" Text="{Binding Distro}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Kernel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Kernel"/><TextBlock Classes="mValue" Text="{Binding Kernel}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding MachineName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Machine name"/><TextBlock Classes="mValue" Text="{Binding MachineName}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding ProcessorCount, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Processor count"/><TextBlock Classes="mValue" Text="{Binding ProcessorCount}"/></DockPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Classes="mCard">
-                                <StackPanel>
-                                    <TextBlock Classes="mCardTitle" Margin="0,0,0,6" Text="Runtime"/>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Runtime, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text=".NET runtime"/><TextBlock Classes="mValue" Text="{Binding Runtime}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Architecture, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="OS architecture"/><TextBlock Classes="mValue" Text="{Binding Architecture}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding ProcessArchitecture, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Process architecture"/><TextBlock Classes="mValue" Text="{Binding ProcessArchitecture}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Avalonia, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Avalonia"/><TextBlock Classes="mValue" Text="{Binding Avalonia}"/></DockPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Classes="mCard" IsVisible="{Binding DeviceModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                <StackPanel>
-                                    <TextBlock Classes="mCardTitle" Margin="0,0,0,6" Text="Android"/>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Manufacturer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Manufacturer"/><TextBlock Classes="mValue" Text="{Binding Manufacturer}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding DeviceModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Device model"/><TextBlock Classes="mValue" Text="{Binding DeviceModel}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding DeviceHardware, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Hardware"/><TextBlock Classes="mValue" Text="{Binding DeviceHardware}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding SocModel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="SoC model"/><TextBlock Classes="mValue" Text="{Binding SocModel}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding AndroidRelease, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Android release"/><TextBlock Classes="mValue" Text="{Binding AndroidRelease}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding AndroidSdk, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="API level"/><TextBlock Classes="mValue" Text="{Binding AndroidSdk}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding AndroidBoard, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Board"/><TextBlock Classes="mValue" Text="{Binding AndroidBoard}"/></DockPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -1085,7 +1040,6 @@
             </ContentControl.DataTemplates>
         </ContentControl>
 
-        <!-- Bottom tab bar -->
         <Border Grid.Row="1" Background="#252526">
             <UniformGrid Rows="1">
                 <Button Classes="mNav" Command="{Binding SelectHomeCommand}">
@@ -1098,16 +1052,13 @@
                     <StackPanel><TextBlock Classes="mNavIcon" Text="🧩"/><TextBlock Classes="mNavText" Text="Memory"/></StackPanel>
                 </Button>
                 <Button Classes="mNav" Command="{Binding SelectDiskCommand}">
-                    <StackPanel><TextBlock Classes="mNavIcon" Text="💾"/><TextBlock Classes="mNavText" Text="Disk"/></StackPanel>
+                    <StackPanel><TextBlock Classes="mNavIcon" Text="💾"/><TextBlock Classes="mNavText" Text="Storage"/></StackPanel>
                 </Button>
                 <Button Classes="mNav" Command="{Binding SelectWifiCommand}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="📶"/><TextBlock Classes="mNavText" Text="Wi-Fi"/></StackPanel>
                 </Button>
                 <Button Classes="mNav" Command="{Binding SelectGpuCommand}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="🎮"/><TextBlock Classes="mNavText" Text="GPU"/></StackPanel>
-                </Button>
-                <Button Classes="mNav" Command="{Binding SelectSystemCommand}">
-                    <StackPanel><TextBlock Classes="mNavIcon" Text="ℹ"/><TextBlock Classes="mNavText" Text="System"/></StackPanel>
                 </Button>
             </UniformGrid>
         </Border>

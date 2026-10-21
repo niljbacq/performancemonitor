@@ -172,25 +172,78 @@ public sealed class AndroidDiskProvider : IDiskProvider
     public DiskSample? Sample() => new DiskSample { NotSupported = true, NotSupportedMessage = Unavailable };
 }
 
-public sealed class AndroidGpuProvider : IGpuProvider
-{
     private const string Unavailable = "Not available on Android";
 
-    public GpuSpecs GetSpecs() => new()
-    {
-        Name = $"{Android.OS.Build.Hardware ?? "Unknown"} (SoC / board)",
-        DriverVersion = Unavailable,
-        DriverDate = Unavailable,
-        GraphicsApi = Unavailable,
-        PhysicalLocation = Unavailable
-    };
+    // Per-GPU accumulated engine-busy baselines for the computed-utilization path
+    // (deltas of /proc/<pid>/fdinfo drm-engine-* sums over the sample window).
+    private readonly Dictionary<string, (DateTime At, long BusyNs)> _busyBaseline = new();
 
-    public GpuSample? Sample() => new()
+    private static class Errors
     {
-        UtilizationText = Unavailable,
-        TemperatureText = Unavailable,
-        MemoryUsage = Unavailable
-    };
+        // Honest error messages that will be hidden when null (per null=hide rule)
+        public const string NoGpuUtilizationHal = "No public GPU utilization HAL";
+        public const string NoGpuThermalZone = "No gpu/mtktsgpu thermal zone";
+        public const string GpuMemoryNotExposed = "GPU memory not exposed";
+    }
+
+    public GpuSpecs GetSpecs()
+    {
+        var list = GetGpuList();
+        return list.Count == 0 ? new GpuSpecs() : new GpuSpecs
+        {
+            Name = list[0].Name,
+            Vendor = list[0].Vendor,
+            DriverVersion = list[0].DriverVersion,
+            GraphicsApi = list[0].GraphicsApi
+        };
+    }
+
+    public GpuSample? Sample() => null;
+
+    public IReadOnlyList<GpuInfo> GetGpuList()
+    {
+        // Runs on a background thread (GpuViewModel calls GetGpuList inside Task.Run), which is what EGL needs.
+        var gl = GpuInfoEgl.Read();
+
+        string soc = $"{Android.OS.Build.Hardware ?? "Unknown"} (SoC / board)";
+        string? model = gl?.Renderer
+                        ?? Fmt.ReadText("/sys/kernel/gpu/gpu_model")            // MediaTek, best effort
+                        ?? Fmt.ReadText("/sys/class/kgsl/kgsl-3d0/gpu_model");  // Qualcomm, best effort
+
+        return new List<GpuInfo>
+        {
+            new()
+            {
+                Name = string.IsNullOrWhiteSpace(model) ? soc : model,
+                Vendor = gl?.Vendor ?? Fmt.NA,
+                GraphicsApi = gl?.Version ?? Unavailable,
+                DriverVersion = Unavailable,
+                DriverDate = Unavailable,
+                PhysicalLocation = Unavailable,
+                Kind = "Integrated"   // Android exposes only the SoC's integrated GPU
+            }
+        };
+    }
+
+    public IReadOnlyList<GpuInfo> SampleGpuList()
+    {
+        var list = new List<GpuInfo>();
+        foreach (var g in GetGpuList())
+        {
+            var info = Clone(g);
+            info.UtilizationText = null;
+            info.MemoryUsage = null;
+
+            // Best-effort thermal. Prefer a GPU-specific thermal zone; when none
+            // is readable fall back to honest device-level signals (battery
+            // temperature / thermal headroom / thermal status).
+            string? temp = ReadGpuTemperature() ?? ReadFallbackThermal();
+            info.TemperatureText = temp; // null if unavailable, will be hidden per null=hide rule
+
+            list.Add(info);
+        }
+        return list;
+    }
 }
 
 public sealed class AndroidWifiProvider : IWifiProvider
