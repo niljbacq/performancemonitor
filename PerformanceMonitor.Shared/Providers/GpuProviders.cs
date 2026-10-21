@@ -119,8 +119,7 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
                 var info = new GpuInfo
                 {
                     Name = name,
-                    DriverVersion = obj["DriverVersion"]?.ToString() ?? "N/A",
-                    GraphicsApi = "DirectX 12",
+                    DriverVersion = obj["DriverVersion"]?.ToString(),
                     PhysicalLocation = pnp ?? "PCI Bus",
                     Vendor = VendorFromName(name),
                     Kind = GpuClassifier.Classify(name, pnp),
@@ -141,7 +140,6 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
             list.Add(new GpuInfo
             {
                 Name = "Windows Graphics Device",
-                GraphicsApi = "DirectX 12",
                 Kind = "Unknown"
             });
         }
@@ -676,25 +674,14 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                     double busyMs = (busyNs - prev.BusyNs) / 1_000_000.0;
                     double util = Math.Clamp(busyMs / elapsedMs * 100.0, 0, 100);
                     info.Utilization = Math.Round(util, 1);
+                    info.UtilizationText = null;
                 }
                 else if (info.Utilization == null)
                 {
                     bool radeon = info.DriverVersion != null &&
                         info.DriverVersion.StartsWith("radeon", StringComparison.OrdinalIgnoreCase);
                     if (radeon)
-                    {
                         info.UtilizationText = RadeonUtilReason(info);
-                    }
-                    else if (info.Kind == "Integrated")
-                    {
-                        double? cpuPct = CpuUtilizationPercent();
-                        if (cpuPct.HasValue)
-                        {
-                            double p = Math.Round(cpuPct.Value, 1);
-                            info.Utilization = p;
-                            info.UtilizationText = $"{p}% (CPU proxy)";
-                        }
-                    }
                 }
             }
         }
@@ -758,7 +745,10 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                             if (inBlock && key.StartsWith("drm-engine-", StringComparison.Ordinal))
                             {
                                 any = true;
-                                if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out long ns))
+                                // fdinfo writes "<nanoseconds> ns"; parse only the number.
+                                int space = value.IndexOf(' ');
+                                string number = space > 0 ? value[..space] : value;
+                                if (long.TryParse(number, NumberStyles.Integer, CultureInfo.InvariantCulture, out long ns))
                                     total += ns;
                             }
                         }
@@ -769,46 +759,6 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         }
         catch { }
         return (total, any);
-    }
-
-    // CPU busy % from /proc/stat deltas (same math as LinuxCpuProvider.GetUsagePercent,
-    // kept here so GPU proxying does not depend on the CPU provider).
-    private static (DateTime At, long Idle, long Total) _cpuBaseline;
-    private static double? CpuUtilizationPercent()
-    {
-        try
-        {
-            string? first = null;
-            foreach (string line in File.ReadAllLines("/proc/stat"))
-            {
-                if (line.StartsWith("cpu ", StringComparison.Ordinal)) { first = line; break; }
-            }
-            if (first == null) return null;
-
-            var parts = first.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 5) return null;
-
-            long idle = long.Parse(parts[4], CultureInfo.InvariantCulture) +
-                        (parts.Length > 5 ? long.Parse(parts[5], CultureInfo.InvariantCulture) : 0);   // idle + iowait
-            long total = 0;
-            for (int i = 1; i < parts.Length; i++)
-                total += long.Parse(parts[i], CultureInfo.InvariantCulture);
-
-            DateTime now = DateTime.UtcNow;
-            var prev = _cpuBaseline;
-            _cpuBaseline = (now, idle, total);
-
-            if (prev.Total <= 0) return null;                    // first sample
-            long dIdle = idle - prev.Idle;
-            long dTotal = total - prev.Total;
-            if (dTotal <= 0) return null;
-            double busy = 1.0 - (double)dIdle / dTotal;
-            return Math.Clamp(busy * 100.0, 0, 100);
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private List<GpuInfo> BuildList()
@@ -847,7 +797,6 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                     Name = name,
                     Kind = GpuClassifier.Classify(name, vendorRaw),
                     Vendor = string.IsNullOrWhiteSpace(vendor) ? null : vendor,
-                    GraphicsApi = "Vulkan / OpenGL",
                     PhysicalLocation = slot ?? card,
                     DriverVersion = driverVersion
                 }));
@@ -869,7 +818,6 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                     PciBus = entry.Slot,
                     Kind = GpuClassifier.Classify(entry.Name, null),
                     Vendor = VendorLabelFromName(entry.Name),
-                    GraphicsApi = "Vulkan / OpenGL",
                     PhysicalLocation = entry.Slot
                 });
             }
@@ -893,7 +841,7 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
             // resort ask radeontop, which reads the GPU busy register over DRM
             // and needs neither debugfs nor root.
             if (!TryRadeontopUtilization(info))
-                info.UtilizationText = DebugfsReason(info, device);
+                info.UtilizationText = DebugfsReason(device);
         }
 
         if (TryReadTempC(device, out double temp))
@@ -1017,10 +965,22 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         catch { }
     }
 
-    private static string DebugfsReason(GpuInfo info, string device)
+    private static string DebugfsReason(string device)
     {
         string driver = ReadDriverName(device) ?? "this";
-        if (!Directory.Exists("/sys/kernel/debug") || !Directory.EnumerateFileSystemEntries("/sys/kernel/debug").Any())
+        bool mounted;
+        try
+        {
+            mounted = Directory.Exists("/sys/kernel/debug")
+                && Directory.EnumerateFileSystemEntries("/sys/kernel/debug").Any();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // debugfs is mounted but not listable by this user. This is not an
+            // error for the caller; it only means the reason string differs.
+            mounted = true;
+        }
+        if (!mounted)
             return "Requires debugfs mount for " + driver + " utilization (sudo mount -t debugfs none /sys/kernel/debug)";
         return driver == "radeon"
             ? "Requires readable /sys/kernel/debug/dri/*/radeon_pm_info (debugfs is root-only by default)"
@@ -1059,10 +1019,15 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
     {
         const string marker = "controller:";
         int idx = line.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (idx >= 0) return line[(idx + marker.Length)..].Trim();
-        int colon = line.LastIndexOf(':');
-        if (colon >= 0 && colon + 1 < line.Length) return line[(colon + 1)..].Trim();
-        return null;
+        string? name = idx >= 0 ? line[(idx + marker.Length)..].Trim() : null;
+        if (name == null)
+        {
+            int colon = line.LastIndexOf(':');
+            if (colon < 0 || colon + 1 >= line.Length) return null;
+            name = line[(colon + 1)..].Trim();
+        }
+        // lspci appends " (rev 09)"; it is noise for a display name.
+        return Regex.Replace(name, @"\s*\(rev [0-9a-fA-F]+\)$", "");
     }
 
     private static bool IsCardName(string name, out int index)

@@ -534,18 +534,18 @@
                                     <TextBlock Text="{Binding Integrated.EmptyLabel}" FontSize="14" Foreground="#888888"
                                                IsVisible="{Binding !Integrated.HasGpu}"/>
 
-                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Integrated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Integrated.HasUtilizationValue}">
                                         <TextBlock Text="3D Utilization" FontSize="12" Foreground="#888888"/>
                                         <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
                                     </Grid>
-                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Integrated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Integrated.HasUtilizationValue}">
                                         <ProgressBar Value="{Binding Integrated.UtilizationValue}" Minimum="0" Maximum="100" Height="16" Foreground="#00A8FF" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
                                     </Border>
 
                                     <Grid ColumnDefinitions="*, *" IsVisible="{Binding Integrated.HasGpu}">
                                         <StackPanel Grid.Column="0" IsVisible="{Binding Integrated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="Utilization" FontSize="11" Foreground="#888888"/>
-                                            <TextBlock Text="{Binding Integrated.Utilization}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                            <TextBlock Text="{Binding Integrated.Utilization}" FontSize="18" FontWeight="SemiBold" Foreground="White" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" IsVisible="{Binding Integrated.Temperature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="GPU Temperature" FontSize="11" Foreground="#888888"/>
@@ -585,18 +585,18 @@
                                     <TextBlock Text="{Binding Dedicated.EmptyLabel}" FontSize="14" Foreground="#888888"
                                                IsVisible="{Binding !Dedicated.HasGpu}"/>
 
-                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Dedicated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                    <Grid ColumnDefinitions="*, Auto" Margin="0,0,0,4" IsVisible="{Binding Dedicated.HasUtilizationValue}">
                                         <TextBlock Text="3D Utilization" FontSize="12" Foreground="#888888"/>
                                         <TextBlock Grid.Column="1" Text="100%" FontSize="12" Foreground="#888888"/>
                                     </Grid>
-                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Dedicated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                    <Border Height="80" Background="#0C1013" BorderBrush="#2B3036" BorderThickness="1" CornerRadius="3" Padding="10" Margin="0,0,0,8" IsVisible="{Binding Dedicated.HasUtilizationValue}">
                                         <ProgressBar Value="{Binding Dedicated.UtilizationValue}" Minimum="0" Maximum="100" Height="16" Foreground="#00A8FF" Background="#1E272C" VerticalAlignment="Center" CornerRadius="2"/>
                                     </Border>
 
                                     <Grid ColumnDefinitions="*, *" IsVisible="{Binding Dedicated.HasGpu}">
                                         <StackPanel Grid.Column="0" IsVisible="{Binding Dedicated.Utilization, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="Utilization" FontSize="11" Foreground="#888888"/>
-                                            <TextBlock Text="{Binding Dedicated.Utilization}" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                            <TextBlock Text="{Binding Dedicated.Utilization}" FontSize="18" FontWeight="SemiBold" Foreground="White" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" IsVisible="{Binding Dedicated.Temperature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                             <TextBlock Text="GPU Temperature" FontSize="11" Foreground="#888888"/>

@@ -233,6 +233,9 @@ public partial class GpuSubViewModel : ViewModelBase
     private string? _utilization;
     public string? Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
 
+    private bool _hasUtilizationValue;
+    public bool HasUtilizationValue { get => _hasUtilizationValue; set => SetProperty(ref _hasUtilizationValue, value); }
+
     private double _utilizationValue;
     public double UtilizationValue { get => _utilizationValue; set => SetProperty(ref _utilizationValue, value); }
 
@@ -281,6 +284,7 @@ public partial class GpuSubViewModel : ViewModelBase
 
     public void UpdateSample(GpuInfo g)
     {
+        HasUtilizationValue = g.Utilization is double;
         if (g.Utilization is double u)
         {
             UtilizationValue = u;
@@ -302,6 +306,7 @@ public partial class GpuSubViewModel : ViewModelBase
 
     public void UpdateSample(GpuSample s)
     {
+        HasUtilizationValue = s.Utilization is double;
         if (s.Utilization is double u)
         {
             UtilizationValue = u;
@@ -318,6 +323,7 @@ public partial class GpuSubViewModel : ViewModelBase
         HasGpu = false;
         GpuName = EmptyLabel;
         Utilization = null;
+        HasUtilizationValue = false;
         UtilizationValue = 0;
         Temperature = null;
         DriverVersion = null;
