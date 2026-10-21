@@ -496,8 +496,8 @@ internal static class NvidiaSmi
             if (!string.IsNullOrWhiteSpace(row.DriverVersion)) g.DriverVersion = row.DriverVersion;
             if (!string.IsNullOrWhiteSpace(row.PciBus)) g.PciBus = row.PciBus;
             if (!includeLive) continue;
-            if (row.Utilization is double u) g.Utilization = u;
-            if (row.TemperatureC is double t) g.TemperatureC = t;
+            if (row.Utilization is double u) { g.Utilization = u; g.UtilizationText = null; }
+            if (row.TemperatureC is double t) { g.TemperatureC = t; g.TemperatureText = null; }
             if (row.MemoryUsage != null) g.MemoryUsage = row.MemoryUsage;
         }
     }

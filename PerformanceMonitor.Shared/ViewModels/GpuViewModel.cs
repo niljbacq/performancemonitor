@@ -167,9 +167,9 @@ public partial class GpuViewModel : ViewModelBase
                         if (sample.Utilization is double u)
                         {
                             UtilizationValue = u;
-                            Utilization = $"{u}%";
+                            Utilization = $"{u:0}%";
                         }
-                        if (sample.UtilizationText != null) Utilization = sample.UtilizationText;
+                        if (sample.UtilizationText != null && sample.Utilization == null) Utilization = sample.UtilizationText;
                         if (sample.TemperatureC is double t) Temperature = $"{t} °C";
                         if (sample.TemperatureText != null) Temperature = sample.TemperatureText;
                         if (sample.MemoryUsage != null) MemoryUsage = sample.MemoryUsage;
@@ -189,9 +189,9 @@ public partial class GpuViewModel : ViewModelBase
         if (d.Utilization is double u)
         {
             UtilizationValue = u;
-            Utilization = $"{u}%";
+            Utilization = $"{u:0}%";
         }
-        if (d.UtilizationText != null) Utilization = d.UtilizationText;
+        if (d.UtilizationText != null && d.Utilization == null) Utilization = d.UtilizationText;
         if (d.TemperatureC is double t) Temperature = $"{t} °C";
         if (d.TemperatureText != null) Temperature = d.TemperatureText;
         if (d.MemoryUsage != null) MemoryUsage = d.MemoryUsage;
@@ -288,7 +288,7 @@ public partial class GpuSubViewModel : ViewModelBase
         if (g.Utilization is double u)
         {
             UtilizationValue = u;
-            Utilization = $"{u}%";
+            Utilization = $"{u:0}%";
         }
         if (g.UtilizationText != null && g.Utilization == null)
             Utilization = g.UtilizationText;
@@ -310,9 +310,9 @@ public partial class GpuSubViewModel : ViewModelBase
         if (s.Utilization is double u)
         {
             UtilizationValue = u;
-            Utilization = $"{u}%";
+            Utilization = $"{u:0}%";
         }
-        if (s.UtilizationText != null) Utilization = s.UtilizationText;
+        if (s.UtilizationText != null && s.Utilization == null) Utilization = s.UtilizationText;
         if (s.TemperatureC is double t) Temperature = $"{t} °C";
         if (s.TemperatureText != null) Temperature = s.TemperatureText;
         if (s.MemoryUsage != null) MemoryUsage = s.MemoryUsage;
