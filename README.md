@@ -31,28 +31,17 @@ The app **never fakes data**. If a platform blocks access to a value (for exampl
 
 ## Install
 
-Download the latest files from the [Releases page](https://github.com/niljbacq/performancemonitor/releases/latest). No .NET runtime or extra libraries are needed: each desktop download is one self-contained file.
-
 ### Windows
 
-1. Download `PerformanceMonitor-windows-x64.exe`.
-2. Run it.
-3. If Windows SmartScreen shows "Windows protected your PC", click **More info → Run anyway**. The build is unsigned.
+1. Download `performance-monitor-windows-x64.zip` from the [latest Actions run](https://github.com/niljbacq/performancemonitor/actions).
+2. Extract the zip.
+3. Run `PerformanceMonitor.exe`.
+4. If Windows SmartScreen shows "Windows protected your PC", click **More info → Run anyway**. The binary is unsigned.
 
 ### Linux
 
-1. Download `PerformanceMonitor-linux-x64`.
-2. Make it executable and run it:
-
+1. Download `performance-monitor-linux-x64.zip` from the [latest Actions run](https://github.com/niljbacq/performancemonitor/actions).
+2. Extract:
    ```bash
-   chmod +x PerformanceMonitor-linux-x64
-   ./PerformanceMonitor-linux-x64
-   ```
-
-### Android
-
-1. Download the `PerformanceMonitor-android-*.apk` file.
-2. Open it on the device and allow installation from unknown sources if prompted.
-
-Each release also includes `SHA256SUMS` so you can verify the downloads.
-
+   unzip performance-monitor-linux-x64.zip -d performancemonitor
+   cd performancemonitor
