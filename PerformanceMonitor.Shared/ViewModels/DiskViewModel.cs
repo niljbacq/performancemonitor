@@ -16,20 +16,20 @@ public partial class DiskViewModel : ViewModelBase
     private string _modelName = "Detecting Disk...";
     public string ModelName { get => _modelName; set => SetProperty(ref _modelName, value); }
 
-    private string _activeTime = "0%";
-    public string ActiveTime { get => _activeTime; set => SetProperty(ref _activeTime, value); }
+    private string? _activeTime;
+    public string? ActiveTime { get => _activeTime; set => SetProperty(ref _activeTime, value); }
 
     private double _activeTimeValue = 0;
     public double ActiveTimeValue { get => _activeTimeValue; set => SetProperty(ref _activeTimeValue, value); }
 
-    private string _averageResponseTime = "0.0 ms";
-    public string AverageResponseTime { get => _averageResponseTime; set => SetProperty(ref _averageResponseTime, value); }
+    private string? _averageResponseTime;
+    public string? AverageResponseTime { get => _averageResponseTime; set => SetProperty(ref _averageResponseTime, value); }
 
-    private string _readSpeed = "0 KB/s";
-    public string ReadSpeed { get => _readSpeed; set => SetProperty(ref _readSpeed, value); }
+    private string? _readSpeed;
+    public string? ReadSpeed { get => _readSpeed; set => SetProperty(ref _readSpeed, value); }
 
-    private string _writeSpeed = "0 KB/s";
-    public string WriteSpeed { get => _writeSpeed; set => SetProperty(ref _writeSpeed, value); }
+    private string? _writeSpeed;
+    public string? WriteSpeed { get => _writeSpeed; set => SetProperty(ref _writeSpeed, value); }
 
     private string _capacity = "-";
     public string Capacity { get => _capacity; set => SetProperty(ref _capacity, value); }
@@ -54,9 +54,12 @@ public partial class DiskViewModel : ViewModelBase
 
     public DiskSubViewModel Ssd { get; } = new DiskSubViewModel("SSD", "No SSD detected");
     public DiskSubViewModel Hdd { get; } = new DiskSubViewModel("HDD", "No HDD detected");
+    public DiskSubViewModel Other { get; } = new DiskSubViewModel("Storage", "No storage detected");
 
     private readonly IDiskProvider _provider;
     private readonly IDiskListProvider? _listProvider;
+    private CancellationTokenSource? _cts;
+    private bool _specsLoaded;
 
     public DiskViewModel() : this(ProviderFactory.CreateDisk()) { }
 
@@ -64,8 +67,27 @@ public partial class DiskViewModel : ViewModelBase
     {
         _provider = provider;
         _listProvider = provider as IDiskListProvider;
-        _ = LoadDiskSpecsAsync();
-        _ = StartMonitoringAsync();
+    }
+
+    public void Start()
+    {
+        if (_cts != null) return;
+        _cts = new CancellationTokenSource();
+
+        if (!_specsLoaded)
+        {
+            _specsLoaded = true;
+            _ = LoadDiskSpecsAsync();
+        }
+
+        _ = StartMonitoringAsync(_cts.Token);
+    }
+
+    public void Stop()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
     }
 
     private async Task LoadDiskSpecsAsync()
@@ -116,10 +138,19 @@ public partial class DiskViewModel : ViewModelBase
         {
             Hdd.Update(info);
             Ssd.ResetToEmpty();
+            Other.ResetToEmpty();
+        }
+        else if (IsSsd(info))
+        {
+            Ssd.Update(info);
+            Hdd.ResetToEmpty();
+            Other.ResetToEmpty();
         }
         else
         {
-            Ssd.Update(info);
+            // Unknown type: show it neutrally instead of pretending it is an SSD.
+            Other.Update(info);
+            Ssd.ResetToEmpty();
             Hdd.ResetToEmpty();
         }
     }
@@ -128,11 +159,13 @@ public partial class DiskViewModel : ViewModelBase
     {
         var ssd = PickPrimary(list, IsSsd);
         var hdd = PickPrimary(list, IsHdd);
+        var other = PickPrimary(list, d => !IsSsd(d) && !IsHdd(d));
 
         if (ssd != null) Ssd.Update(ssd); else Ssd.ResetToEmpty();
         if (hdd != null) Hdd.Update(hdd); else Hdd.ResetToEmpty();
+        if (other != null) Other.Update(other); else Other.ResetToEmpty();
 
-        var primary = ssd ?? hdd;
+        var primary = ssd ?? hdd ?? other;
         if (primary != null)
         {
             DiskName = primary.DiskName ?? "Disk";
@@ -150,91 +183,104 @@ public partial class DiskViewModel : ViewModelBase
         }
     }
 
-    private async Task StartMonitoringAsync()
+    private async Task StartMonitoringAsync(CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
 
-        while (await timer.WaitForNextTickAsync().ConfigureAwait(false))
+        try
         {
-            try
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                if (_listProvider != null)
+                try
                 {
-                    var samples = _listProvider.SampleDiskList();
-                    var ssd = PickPrimary(samples, IsSsd);
-                    var hdd = PickPrimary(samples, IsHdd);
-
-                    Dispatcher.UIThread.Post(() =>
+                    if (_listProvider != null)
                     {
-                        if (ssd != null) Ssd.UpdateSample(ssd);
-                        if (hdd != null) Hdd.UpdateSample(hdd);
+                        var samples = _listProvider.SampleDiskList();
+                        var ssd = PickPrimary(samples, IsSsd);
+                        var hdd = PickPrimary(samples, IsHdd);
+                        var other = PickPrimary(samples, d => !IsSsd(d) && !IsHdd(d));
 
-                        var primary = ssd ?? hdd;
-                        if (primary != null) ApplySampleToFlat(primary);
-                    });
-                }
-                else
-                {
-                    var sample = _provider.Sample();
-                    if (sample == null) continue;
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (sample.NotSupported)
+                        Dispatcher.UIThread.Post(() =>
                         {
-                            string msg = sample.NotSupportedMessage ?? "N/A";
-                            ReadSpeed = msg;
-                            WriteSpeed = msg;
-                            ActiveTime = msg;
-                            AverageResponseTime = msg;
+                            if (ssd != null) Ssd.UpdateSample(ssd); else Ssd.ResetToEmpty();
+                            if (hdd != null) Hdd.UpdateSample(hdd); else Hdd.ResetToEmpty();
+                            if (other != null) Other.UpdateSample(other); else Other.ResetToEmpty();
+
+                            var primary = ssd ?? hdd ?? other;
+                            if (primary != null) ApplySampleToFlat(primary);
+                            else ClearFlatSample();
+                        });
+                    }
+                    else
+                    {
+                        var sample = _provider.Sample();
+
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (sample == null || sample.NotSupported)
+                            {
+                                ClearFlatSample();
+                                if (Hdd.HasDisk) Hdd.UpdateSample(new DiskSample { NotSupported = true });
+                                else if (Ssd.HasDisk) Ssd.UpdateSample(new DiskSample { NotSupported = true });
+                                else if (Other.HasDisk) Other.UpdateSample(new DiskSample { NotSupported = true });
+                                return;
+                            }
+
+                            ApplySampleToFlat(sample);
 
                             if (Hdd.HasDisk) Hdd.UpdateSample(sample);
                             else if (Ssd.HasDisk) Ssd.UpdateSample(sample);
-                            return;
-                        }
-
-                        if (sample.ReadBytesPerSec is double r) ReadSpeed = FormatSpeed(r);
-                        if (sample.WriteBytesPerSec is double w) WriteSpeed = FormatSpeed(w);
-                        if (sample.ActivePercent is double a)
-                        {
-                            ActiveTimeValue = a;
-                            ActiveTime = $"{a}%";
-                        }
-                        if (sample.ResponseMs is double ms) AverageResponseTime = $"{ms:F1} ms";
-
-                        if (Hdd.HasDisk) Hdd.UpdateSample(sample);
-                        else if (Ssd.HasDisk) Ssd.UpdateSample(sample);
-                    });
+                            else if (Other.HasDisk) Other.UpdateSample(sample);
+                        });
+                    }
                 }
+                catch { }
             }
-            catch { }
         }
+        catch (OperationCanceledException) { }
+    }
+
+    private void ClearFlatSample()
+    {
+        ReadSpeed = null;
+        WriteSpeed = null;
+        ActiveTime = null;
+        ActiveTimeValue = 0;
+        AverageResponseTime = null;
+    }
+
+    private void ApplySampleToFlat(DiskSample d)
+    {
+        if (d.NotSupported)
+        {
+            ClearFlatSample();
+            return;
+        }
+
+        ReadSpeed = d.ReadBytesPerSec is double r ? FormatSpeed(r) : null;
+        WriteSpeed = d.WriteBytesPerSec is double w ? FormatSpeed(w) : null;
+        ActiveTimeValue = d.ActivePercent ?? 0;
+        ActiveTime = d.ActivePercent is double a ? $"{a}%" : null;
+        AverageResponseTime = d.ResponseMs is double ms ? $"{ms:F1} ms" : null;
     }
 
     private void ApplySampleToFlat(DiskInfo d)
     {
         if (d.NotSupported)
         {
-            string msg = d.NotSupportedMessage ?? "N/A";
-            ReadSpeed = msg;
-            WriteSpeed = msg;
-            ActiveTime = msg;
-            AverageResponseTime = msg;
+            ClearFlatSample();
             return;
         }
 
-        if (d.ReadBytesPerSec is double r) ReadSpeed = FormatSpeed(r);
-        if (d.WriteBytesPerSec is double w) WriteSpeed = FormatSpeed(w);
-        if (d.ActivePercent is double a)
-        {
-            ActiveTimeValue = a;
-            ActiveTime = $"{a}%";
-        }
-        if (d.ResponseMs is double ms) AverageResponseTime = $"{ms:F1} ms";
+        ReadSpeed = d.ReadBytesPerSec is double r ? FormatSpeed(r) : null;
+        WriteSpeed = d.WriteBytesPerSec is double w ? FormatSpeed(w) : null;
+        ActiveTimeValue = d.ActivePercent ?? 0;
+        ActiveTime = d.ActivePercent is double a ? $"{a}%" : null;
+        AverageResponseTime = d.ResponseMs is double ms ? $"{ms:F1} ms" : null;
     }
 
     private static bool IsSsd(DiskInfo d)
-        => d.Type == "SSD" || d.Type == "NVMe SSD" || d.Type == "Unknown";
+        => d.Type == "SSD" || d.Type == "NVMe SSD";
 
     private static bool IsHdd(DiskInfo d)
         => d.Type == "HDD";
@@ -349,26 +395,18 @@ public partial class DiskSubViewModel : ViewModelBase
             WriteSpeed = null;
             WriteSpeedBytes = null;
             ActiveTime = null;
+            ActiveTimeValue = 0;
             AverageResponseTime = null;
             return;
         }
 
-        if (d.ReadBytesPerSec is double r)
-        {
-            ReadSpeedBytes = r;
-            ReadSpeed = DiskViewModel.FormatSpeed(r);
-        }
-        if (d.WriteBytesPerSec is double w)
-        {
-            WriteSpeedBytes = w;
-            WriteSpeed = DiskViewModel.FormatSpeed(w);
-        }
-        if (d.ActivePercent is double a)
-        {
-            ActiveTimeValue = a;
-            ActiveTime = $"{a}%";
-        }
-        if (d.ResponseMs is double ms) AverageResponseTime = $"{ms:F1} ms";
+        ReadSpeedBytes = d.ReadBytesPerSec;
+        ReadSpeed = d.ReadBytesPerSec is double r ? DiskViewModel.FormatSpeed(r) : null;
+        WriteSpeedBytes = d.WriteBytesPerSec;
+        WriteSpeed = d.WriteBytesPerSec is double w ? DiskViewModel.FormatSpeed(w) : null;
+        ActiveTimeValue = d.ActivePercent ?? 0;
+        ActiveTime = d.ActivePercent is double a ? $"{a}%" : null;
+        AverageResponseTime = d.ResponseMs is double ms ? $"{ms:F1} ms" : null;
     }
 
     public void UpdateSample(DiskSample d)
@@ -380,26 +418,18 @@ public partial class DiskSubViewModel : ViewModelBase
             WriteSpeed = null;
             WriteSpeedBytes = null;
             ActiveTime = null;
+            ActiveTimeValue = 0;
             AverageResponseTime = null;
             return;
         }
 
-        if (d.ReadBytesPerSec is double r)
-        {
-            ReadSpeedBytes = r;
-            ReadSpeed = DiskViewModel.FormatSpeed(r);
-        }
-        if (d.WriteBytesPerSec is double w)
-        {
-            WriteSpeedBytes = w;
-            WriteSpeed = DiskViewModel.FormatSpeed(w);
-        }
-        if (d.ActivePercent is double a)
-        {
-            ActiveTimeValue = a;
-            ActiveTime = $"{a}%";
-        }
-        if (d.ResponseMs is double ms) AverageResponseTime = $"{ms:F1} ms";
+        ReadSpeedBytes = d.ReadBytesPerSec;
+        ReadSpeed = d.ReadBytesPerSec is double r ? DiskViewModel.FormatSpeed(r) : null;
+        WriteSpeedBytes = d.WriteBytesPerSec;
+        WriteSpeed = d.WriteBytesPerSec is double w ? DiskViewModel.FormatSpeed(w) : null;
+        ActiveTimeValue = d.ActivePercent ?? 0;
+        ActiveTime = d.ActivePercent is double a ? $"{a}%" : null;
+        AverageResponseTime = d.ResponseMs is double ms ? $"{ms:F1} ms" : null;
     }
 
     public void ResetToEmpty()

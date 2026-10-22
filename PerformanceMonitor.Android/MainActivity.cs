@@ -25,6 +25,18 @@ public class MainActivity : AvaloniaMainActivity
         StartMonitorService();
     }
 
+    protected override void OnPause()
+    {
+        base.OnPause();
+        (Avalonia.Application.Current as TaskManager.App)?.MainViewModel?.Pause();
+    }
+
+    protected override void OnResume()
+    {
+        base.OnResume();
+        (Avalonia.Application.Current as TaskManager.App)?.MainViewModel?.Resume();
+    }
+
     // One request for everything still missing: Android shows a single
     // permission flow instead of two overlapping dialogs.
     // Location is needed to read the Wi-Fi name; notifications (Android 13+)

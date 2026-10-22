@@ -31,7 +31,7 @@ public abstract class CpuProviderBase : ICpuProvider
                 }
                 catch { }
             }
-            return new ProcessStats(list.Length, threads, handles > 0 ? handles.ToString() : "N/A");
+            return new ProcessStats(list.Length, threads, handles > 0 ? handles.ToString() : null);
         }
         finally
         {
@@ -43,24 +43,67 @@ public abstract class CpuProviderBase : ICpuProvider
 [SupportedOSPlatform("windows")]
 public sealed class WindowsCpuProvider : CpuProviderBase
 {
-    private PerformanceCounter? _counter;
+    // WMI perf class/property names are language-neutral: unlike PerformanceCounter,
+    // this works on non-English Windows. Averaging per-core rows avoids depending on
+    // the localised "_Total" instance name.
+    private readonly ManagementObjectSearcher? _usageSearcher;
+    private bool _usageFailed;
 
     public WindowsCpuProvider()
     {
         try
         {
-            _counter = new PerformanceCounter("Processor", "% Processor Time", "_Total");
-            _counter.NextValue();
+            _usageSearcher = new ManagementObjectSearcher(
+                "SELECT Name, PercentProcessorTime FROM Win32_PerfFormattedData_PerfOS_Processor");
         }
         catch
         {
-            _counter = null;
+            _usageSearcher = null;
+            _usageFailed = true;
         }
     }
 
     protected override bool CountHandles => true;
 
-    public override float GetUsagePercent() => _counter?.NextValue() ?? 0;
+    public string? UsageUnavailableMessage =>
+        _usageFailed ? "CPU utilization unavailable (WMI performance data)" : null;
+
+    public override float GetUsagePercent()
+    {
+        if (_usageSearcher == null)
+        {
+            _usageFailed = true;
+            return 0;
+        }
+
+        try
+        {
+            double sum = 0;
+            int count = 0;
+            foreach (ManagementObject obj in _usageSearcher.Get())
+            {
+                string name = obj["Name"]?.ToString() ?? "";
+                if (name.StartsWith("_", StringComparison.Ordinal)) continue;
+                if (obj["PercentProcessorTime"] == null) continue;
+                sum += Convert.ToDouble(obj["PercentProcessorTime"]);
+                count++;
+            }
+
+            if (count == 0)
+            {
+                _usageFailed = true;
+                return 0;
+            }
+
+            _usageFailed = false;
+            return (float)Math.Clamp(sum / count, 0, 100);
+        }
+        catch
+        {
+            _usageFailed = true;
+            return 0;
+        }
+    }
 
     public override CpuSpecs GetSpecs()
     {
@@ -119,6 +162,7 @@ public sealed class LinuxCpuProvider : CpuProviderBase
 {
     private ulong _prevIdle;
     private ulong _prevTotal;
+    private bool _primed;
 
     public override CpuSpecs GetSpecs()
     {
@@ -250,11 +294,11 @@ public sealed class LinuxCpuProvider : CpuProviderBase
     {
         try
         {
-            if (!File.Exists("/proc/stat")) return 0;
+            if (!File.Exists("/proc/stat")) return -1;
 
             var parts = File.ReadLines("/proc/stat").First()
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 5) return 0;
+            if (parts.Length < 5) return -1;
 
             ulong idle = ulong.Parse(parts[4]);
             ulong iowait = parts.Length > 5 ? ulong.Parse(parts[5]) : 0;
@@ -263,16 +307,26 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                 if (ulong.TryParse(parts[i], out ulong v)) total += v;
 
             ulong idleTotal = idle + iowait;
+
+            if (!_primed)
+            {
+                // The first read is the since-boot average, not the current rate.
+                _prevIdle = idleTotal;
+                _prevTotal = total;
+                _primed = true;
+                return -1;
+            }
+
             ulong idleDelta = idleTotal - _prevIdle;
             ulong totalDelta = total - _prevTotal;
 
             _prevIdle = idleTotal;
             _prevTotal = total;
 
-            if (totalDelta == 0) return 0;
+            if (totalDelta == 0) return -1;
             return (float)Math.Clamp((1.0 - (double)idleDelta / totalDelta) * 100, 0, 100);
         }
-        catch { return 0; }
+        catch { return -1; }
     }
 
     private static string? ReadLiveCpuMhz()
@@ -416,12 +470,12 @@ public sealed class LinuxCpuProvider : CpuProviderBase
                 catch { }
             }
 
-            string handles = fds > 0 ? $"{fds} files" : "unreadable";
+            string? handles = fds > 0 ? $"{fds} files" : null;
             return new ProcessStats(processes, threads, handles);
         }
         catch
         {
-            return new ProcessStats(0, 0, "N/A");
+            return new ProcessStats(null, null, null);
         }
     }
 }

@@ -18,11 +18,11 @@ public partial class WifiViewModel : ViewModelBase
     private string _status = "Disconnected";
     public string Status { get => _status; set => SetProperty(ref _status, value); }
 
-    private string _sendSpeed = "0 Kbps";
-    public string SendSpeed { get => _sendSpeed; set => SetProperty(ref _sendSpeed, value); }
+    private string? _sendSpeed;
+    public string? SendSpeed { get => _sendSpeed; set => SetProperty(ref _sendSpeed, value); }
 
-    private string _receiveSpeed = "0 Kbps";
-    public string ReceiveSpeed { get => _receiveSpeed; set => SetProperty(ref _receiveSpeed, value); }
+    private string? _receiveSpeed;
+    public string? ReceiveSpeed { get => _receiveSpeed; set => SetProperty(ref _receiveSpeed, value); }
 
     private double _sendValue = 0;
     public double SendValue { get => _sendValue; set => SetProperty(ref _sendValue, value); }
@@ -67,16 +67,30 @@ public partial class WifiViewModel : ViewModelBase
     }
 
     private readonly IWifiProvider _provider;
+    private CancellationTokenSource? _cts;
 
     public WifiViewModel() : this(ProviderFactory.CreateWifi()) { }
 
     public WifiViewModel(IWifiProvider provider)
     {
         _provider = provider;
-        _ = StartNetworkMonitoringAsync();
     }
 
-    private async Task StartNetworkMonitoringAsync()
+    public void Start()
+    {
+        if (_cts != null) return;
+        _cts = new CancellationTokenSource();
+        _ = StartNetworkMonitoringAsync(_cts.Token);
+    }
+
+    public void Stop()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
+
+    private async Task StartNetworkMonitoringAsync(CancellationToken token)
     {
         long oldBytesSent = 0;
         long oldBytesReceived = 0;
@@ -84,11 +98,13 @@ public partial class WifiViewModel : ViewModelBase
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
 
-        while (await timer.WaitForNextTickAsync().ConfigureAwait(false))
+        try
         {
-            tick++;
-            try
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
+                tick++;
+                try
+                {
                 var snap = _provider.GetSnapshot();
                 if (snap != null)
                 {
@@ -157,8 +173,8 @@ public partial class WifiViewModel : ViewModelBase
 
                         if (sendKbps.HasValue) SendValue = sendKbps.Value;
                         if (receiveKbps.HasValue) ReceiveValue = receiveKbps.Value;
-                        if (sendText != null) SendSpeed = sendText;
-                        if (receiveText != null) ReceiveSpeed = receiveText;
+                        SendSpeed = sendText;
+                        ReceiveSpeed = receiveText;
                     });
                     continue;
                 }
@@ -240,8 +256,8 @@ public partial class WifiViewModel : ViewModelBase
 
                     if (sendValue.HasValue) SendValue = sendValue.Value;
                     if (receiveValue.HasValue) ReceiveValue = receiveValue.Value;
-                    if (sendSpeedText != null) SendSpeed = sendSpeedText;
-                    if (receiveSpeedText != null) ReceiveSpeed = receiveSpeedText;
+                    SendSpeed = sendSpeedText;
+                    ReceiveSpeed = receiveSpeedText;
 
                     if (details != null)
                     {
@@ -257,6 +273,8 @@ public partial class WifiViewModel : ViewModelBase
                 PostResetToDisconnectedState("Wi-Fi");
             }
         }
+        }
+        catch (OperationCanceledException) { }
     }
 
     private void PostResetToDisconnectedState(string adapter)

@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -30,14 +33,15 @@ jobs:
         run: >
           dotnet publish "PerformanceMonitor.Desktop/PerformanceMonitor.Desktop.csproj"
           -c Release -r ${{ matrix.rid }} --self-contained true
-          -p:PublishSingleFile=true -o publish
-      - name: Smoke test (dump hardware info)
-        run: ./publish/PerformanceMonitor --dump
-        continue-on-error: true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None -p:DebugSymbols=false
+          -o publish
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: publish/
+          if-no-files-found: error
 
   android:
     runs-on: ubuntu-latest
@@ -116,3 +120,60 @@ jobs:
           name: performance-monitor-android
           path: apk-out/*.apk
           if-no-files-found: error
+
+  release:
+    needs: [build, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare direct-download assets
+        run: |
+          mkdir -p release
+          cp "$(find artifacts/performance-monitor-windows-x64 -name 'PerformanceMonitor.Desktop.exe' -type f | head -n 1)" release/PerformanceMonitor-Windows.exe
+          cp "$(find artifacts/performance-monitor-linux-x64 -name 'PerformanceMonitor.Desktop' -type f | head -n 1)" release/PerformanceMonitor-Linux
+          cp "$(find artifacts/performance-monitor-android -name '*.apk' -type f | head -n 1)" release/PerformanceMonitor-Android.apk
+          chmod +x release/PerformanceMonitor-Linux
+
+      - name: Build Linux installer
+        run: |
+          mkdir -p release/deb/DEBIAN release/deb/usr/bin release/deb/usr/share/applications release/deb/usr/share/icons/hicolor/256x256/apps
+          cp release/PerformanceMonitor-Linux release/deb/usr/bin/performance-monitor
+          chmod 755 release/deb/usr/bin/performance-monitor
+          cp PerformanceMonitor.Shared/Assets/Duck.png release/deb/usr/share/icons/hicolor/256x256/apps/performance-monitor.png
+          cat > release/deb/DEBIAN/control <<'EOF'
+          Package: performance-monitor
+          Version: 1.0.${{ github.run_number }}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Performance Monitor
+          Description: Cross-platform hardware performance monitor.
+          EOF
+          cat > release/deb/usr/share/applications/performance-monitor.desktop <<'EOF'
+          [Desktop Entry]
+          Name=Performance Monitor
+          Exec=performance-monitor
+          Icon=performance-monitor
+          Terminal=false
+          Type=Application
+          Categories=System;Monitor;
+          EOF
+          dpkg-deb --build release/deb release/PerformanceMonitor-Linux.deb
+          rm -rf release/deb
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="build-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" release/* \
+            --title "Performance Monitor build ${GITHUB_RUN_NUMBER}" \
+            --notes "Direct downloads: Windows .exe, Linux .deb or executable, Android .apk. No zip required." \
+            --latest || gh release upload "$tag" release/* --clobber

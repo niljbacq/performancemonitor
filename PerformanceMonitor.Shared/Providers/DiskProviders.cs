@@ -54,23 +54,18 @@ public abstract class DiskProviderBase : IDiskProvider
 [SupportedOSPlatform("windows")]
 public sealed class WindowsDiskProvider : DiskProviderBase
 {
-    private PerformanceCounter? _read, _write, _idle, _response;
+    // WMI formatted perf data keeps English class/property names on non-English
+    // Windows (PerformanceCounter category names are localised).
+    private readonly ManagementObjectSearcher? _perfSearcher;
 
     public WindowsDiskProvider()
     {
         try
         {
-            _read = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total");
-            _write = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
-            _idle = new PerformanceCounter("PhysicalDisk", "% Idle Time", "_Total");
-            _response = new PerformanceCounter("PhysicalDisk", "Avg. Disk sec/Transfer", "_Total");
-
-            _read.NextValue();
-            _write.NextValue();
-            _idle.NextValue();
-            _response.NextValue();
+            _perfSearcher = new ManagementObjectSearcher(
+                "SELECT * FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk");
         }
-        catch { }
+        catch { _perfSearcher = null; }
     }
 
     protected override bool IsSystemDrive(DriveInfo drive)
@@ -97,10 +92,11 @@ public sealed class WindowsDiskProvider : DiskProviderBase
                 ushort mediaType = Convert.ToUInt16(media["MediaType"]);
                 ushort busType = Convert.ToUInt16(media["BusType"]);
 
+                // Unknown media/bus stays null instead of guessing SSD.
                 s.Type = busType == 17 ? "NVMe SSD"
                        : mediaType == 4 ? "SSD"
                        : mediaType == 3 ? "HDD"
-                       : "SSD/HDD";
+                       : null;
                 break;
             }
 
@@ -109,21 +105,32 @@ public sealed class WindowsDiskProvider : DiskProviderBase
         }
         catch
         {
-            s.Type = "SSD";
+            s.Type = null;
         }
     }
 
     public override DiskSample? Sample()
     {
-        if (_read == null || _write == null || _idle == null || _response == null) return null;
+        if (_perfSearcher == null) return null;
 
-        return new DiskSample
+        try
         {
-            ReadBytesPerSec = _read.NextValue(),
-            WriteBytesPerSec = _write.NextValue(),
-            ActivePercent = Math.Clamp(Math.Round(100 - _idle.NextValue()), 0, 100),
-            ResponseMs = _response.NextValue() * 1000.0
-        };
+            foreach (ManagementObject obj in _perfSearcher.Get())
+            {
+                if (!string.Equals(obj["Name"]?.ToString(), "_Total", StringComparison.Ordinal))
+                    continue;
+
+                return new DiskSample
+                {
+                    ReadBytesPerSec = Convert.ToDouble(obj["DiskReadBytesPerSec"]),
+                    WriteBytesPerSec = Convert.ToDouble(obj["DiskWriteBytesPerSec"]),
+                    ActivePercent = Math.Clamp(100 - Convert.ToDouble(obj["PercentIdleTime"]), 0, 100),
+                    ResponseMs = Convert.ToDouble(obj["AvgDiskSecPerTransfer"]) * 1000.0
+                };
+            }
+        }
+        catch { }
+        return null;
     }
 }
 
@@ -326,7 +333,7 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
         if (!File.Exists("/proc/diskstats"))
         {
             info.NotSupported = true;
-            info.NotSupportedMessage = "N/A";
+            info.NotSupportedMessage = "I/O counters unavailable (/proc/diskstats)";
             return;
         }
 
@@ -338,7 +345,7 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
         if (line == null)
         {
             info.NotSupported = true;
-            info.NotSupportedMessage = "N/A";
+            info.NotSupportedMessage = "No /proc/diskstats entry for this device";
             return;
         }
 

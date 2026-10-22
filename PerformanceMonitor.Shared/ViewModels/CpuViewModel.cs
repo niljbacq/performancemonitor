@@ -16,14 +16,16 @@ public partial class CpuViewModel : ViewModelBase
     private string? _hardwareName;
     public string? HardwareName { get => _hardwareName; set => SetProperty(ref _hardwareName, value); }
 
-    private string _utilization = "0%";
-    public string Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
+    private string? _utilization;
+    public string? Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
 
     private double _utilizationValue = 0;
     public double UtilizationValue { get => _utilizationValue; set => SetProperty(ref _utilizationValue, value); }
 
     private bool _hasUtilization = true;
     public bool HasUtilization { get => _hasUtilization; set => SetProperty(ref _hasUtilization, value); }
+
+    [ObservableProperty] private string? _usageNote;
 
     private string? _speed;
     public string? Speed { get => _speed; set => SetProperty(ref _speed, value); }
@@ -77,14 +79,35 @@ public partial class CpuViewModel : ViewModelBase
     [ObservableProperty] private string? _appUsageText;
 
     private readonly ICpuProvider _provider;
+    private CancellationTokenSource? _cts;
+    private bool _specsLoaded;
 
     public CpuViewModel() : this(ProviderFactory.CreateCpu()) { }
 
     public CpuViewModel(ICpuProvider provider)
     {
         _provider = provider;
-        _ = LoadCpuSpecsAsync();
-        _ = StartMonitoringAsync();
+    }
+
+    public void Start()
+    {
+        if (_cts != null) return;
+        _cts = new CancellationTokenSource();
+
+        if (!_specsLoaded)
+        {
+            _specsLoaded = true;
+            _ = LoadCpuSpecsAsync();
+        }
+
+        _ = StartMonitoringAsync(_cts.Token);
+    }
+
+    public void Stop()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
     }
 
     private async Task LoadCpuSpecsAsync()
@@ -92,8 +115,9 @@ public partial class CpuViewModel : ViewModelBase
         var s = await Task.Run(() => _provider.GetSpecs());
 
         if (s.Name != null) CpuName = s.Name;
-        if (s.MarketingName != null) CpuName = s.MarketingName;
-        HardwareName = s.Name;
+        HardwareName = s.Name != null && !string.Equals(s.Name, CpuName, StringComparison.OrdinalIgnoreCase)
+            ? s.Name
+            : null;
         if (s.BaseSpeed != null) BaseSpeed = s.BaseSpeed;
         if (s.Speed != null) Speed = s.Speed;
         if (s.Cores != null) Cores = s.Cores;
@@ -113,58 +137,65 @@ public partial class CpuViewModel : ViewModelBase
         PressureText = s.PressureText;
     }
 
-    private async Task StartMonitoringAsync()
+    private async Task StartMonitoringAsync(CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         int tick = 0;
 
-        while (await timer.WaitForNextTickAsync().ConfigureAwait(false))
+        try
         {
-            tick++;
-            try
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                float rawUsage = _provider.GetUsagePercent();
-                string? usageNote = _provider.UsageUnavailableMessage;
-                int cpuPercent = (int)Math.Round(rawUsage);
-
-                TimeSpan up = TimeSpan.FromMilliseconds(_provider.UptimeMilliseconds);
-                string uptimeText = $"{up.Days}:{up.Hours:D2}:{up.Minutes:D2}:{up.Seconds:D2}";
-
-                bool statsDue = tick % 3 == 1;
-                string? statsNote = _provider.ProcessStatsUnavailableMessage;
-                ProcessStats? stats = statsDue && statsNote == null ? _provider.GetProcessStats() : null;
-
-                string? perCoreText = _provider.PerCoreFrequencyText;
-                string? residencyText = _provider.FrequencyResidencyText;
-                string? appUsageText = _provider.AppUsageText;
-
-                Dispatcher.UIThread.Post(() =>
+                tick++;
+                try
                 {
-                    HasUtilization = usageNote == null;
-                    UtilizationValue = usageNote == null ? cpuPercent : 0;
-                    Utilization = usageNote ?? $"{cpuPercent}%";
-                    Uptime = uptimeText;
+                    float rawUsage = _provider.GetUsagePercent();
+                    if (rawUsage < 0) continue;   // provider is still priming its baseline
 
-                    if (perCoreText != null) PerCoreFrequencyText = perCoreText;
-                    if (residencyText != null) FrequencyResidencyText = residencyText;
-                    if (appUsageText != null) AppUsageText = appUsageText;
+                    string? usageNote = _provider.UsageUnavailableMessage;
+                    int cpuPercent = (int)Math.Round(rawUsage);
 
-                    if (stats != null)
+                    TimeSpan up = TimeSpan.FromMilliseconds(_provider.UptimeMilliseconds);
+                    string uptimeText = $"{up.Days}:{up.Hours:D2}:{up.Minutes:D2}:{up.Seconds:D2}";
+
+                    bool statsDue = tick % 3 == 1;
+                    string? statsNote = _provider.ProcessStatsUnavailableMessage;
+                    ProcessStats? stats = statsDue && statsNote == null ? _provider.GetProcessStats() : null;
+
+                    string? perCoreText = _provider.PerCoreFrequencyText;
+                    string? residencyText = _provider.FrequencyResidencyText;
+                    string? appUsageText = _provider.AppUsageText;
+
+                    Dispatcher.UIThread.Post(() =>
                     {
-                        Processes = stats.Processes?.ToString();
-                        Threads = stats.Threads?.ToString();
-                        Handles = stats.Handles;
-                    }
-                    else if (statsDue && statsNote != null)
-                    {
-                        // Platform has no process stats at all; clear the rows so they hide.
-                        Processes = null;
-                        Threads = null;
-                        Handles = null;
-                    }
-                });
+                        HasUtilization = usageNote == null;
+                        UsageNote = usageNote;
+                        UtilizationValue = usageNote == null ? cpuPercent : 0;
+                        Utilization = usageNote ?? $"{cpuPercent}%";
+                        Uptime = uptimeText;
+
+                        if (perCoreText != null) PerCoreFrequencyText = perCoreText;
+                        if (residencyText != null) FrequencyResidencyText = residencyText;
+                        if (appUsageText != null) AppUsageText = appUsageText;
+
+                        if (stats != null)
+                        {
+                            Processes = stats.Processes?.ToString();
+                            Threads = stats.Threads?.ToString();
+                            Handles = stats.Handles;
+                        }
+                        else if (statsDue && statsNote != null)
+                        {
+                            // Platform has no process stats at all; clear the rows so they hide.
+                            Processes = null;
+                            Threads = null;
+                            Handles = null;
+                        }
+                    });
+                }
+                catch { }
             }
-            catch { }
         }
+        catch (OperationCanceledException) { }
     }
 }

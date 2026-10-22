@@ -14,7 +14,6 @@ namespace TaskManager.Droid;
 
 internal static class Fmt
 {
-    public const string NA = "N/A";
     private const double GiB = 1024.0 * 1024.0 * 1024.0;
 
     public static string Gb(double bytes) => $"{bytes / GiB:F2} GB";
@@ -35,7 +34,7 @@ internal static class Fmt
 
     // Android packs an IPv4 address into an int with the FIRST octet in the lowest byte.
     public static string Ip(int ip)
-        => ip == 0 ? NA : $"{ip & 0xFF}.{(ip >> 8) & 0xFF}.{(ip >> 16) & 0xFF}.{(ip >> 24) & 0xFF}";
+        => ip == 0 ? "-" : $"{ip & 0xFF}.{(ip >> 8) & 0xFF}.{(ip >> 16) & 0xFF}.{(ip >> 24) & 0xFF}";
 
     // Same as Ip but returns null for 0, so callers can hide the row.
     public static string? IpOrNull(int ip)
@@ -111,7 +110,6 @@ public sealed class AndroidCpuProvider : ICpuProvider
         return new CpuSpecs
         {
             Name = hardware ?? "Unknown",
-            MarketingName = MarketingNameFor(hardware),
             Cores = logical.ToString(),
             LogicalProcessors = logical.ToString(),
             BaseSpeed = maxFreq,
@@ -181,30 +179,6 @@ public sealed class AndroidCpuProvider : ICpuProvider
     // shown, so the row hides.
     public string? AppUsageText => null;
 
-    private static string? MarketingNameFor(string? soc)
-    {
-        if (string.IsNullOrWhiteSpace(soc)) return null;
-        string key = soc.Trim().ToLowerInvariant();
-
-        // MediaTek base model numbers (Build.Hardware / ro.board.platform).
-        // mt6789 is shared by G99/G100/G200; the suffix disambiguates.
-        return key switch
-        {
-            "mt6789" or "mt6789v" or "mt6789g" or "mt6789u" => "Helio G99",
-            "mt6789h" or "mt6789i" or "mt6789j" => "Helio G100",
-            "mt6789t" => "Helio G200",
-            "mt6785" or "mt6785v" => "Helio G90",
-            "mt6781" => "Helio G96",
-            "mt6833" => "Dimensity 700",
-            "mt6853" => "Dimensity 720",
-            "mt6873" => "Dimensity 800",
-            "mt6877" => "Dimensity 900",
-            "mt6893" => "Dimensity 1200",
-            "mt6983" => "Dimensity 9000",
-            _ => null
-        };
-    }
-
     public float GetUsagePercent()
     {
         // cpuidle is the working path on Android 8+: /proc/stat is SELinux-blocked
@@ -252,6 +226,7 @@ public sealed class AndroidCpuProvider : ICpuProvider
             _prevIdleUs = totalIdleUs;
             _prevWallMs = wallMs;
             _cpuidlePrimed = true;
+            percent = -1;   // baseline only; the next call has a real delta
             return true;
         }
 
@@ -295,6 +270,7 @@ public sealed class AndroidCpuProvider : ICpuProvider
                 _prevIdle = idleTotal;
                 _prevTotal = total;
                 _procStatPrimed = true;
+                percent = -1;   // baseline only; the next call has a real delta
                 return true;
             }
 
@@ -435,7 +411,7 @@ public sealed class AndroidDiskProvider : IDiskProvider
         {
             DiskName = "Internal storage",
             ModelName = "System storage (I/O needs root)",
-            Type = "Unknown"
+            Type = null
             // SystemDisk / PageFile left null; Android has no equivalent.
         };
 
@@ -534,7 +510,18 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
 
     public GpuSample? Sample() => null;
 
+    private List<GpuInfo>? _cached;
+    private readonly object _cacheLock = new();
+
     public IReadOnlyList<GpuInfo> GetGpuList()
+    {
+        lock (_cacheLock)
+        {
+            return _cached ??= BuildGpuList();
+        }
+    }
+
+    private static List<GpuInfo> BuildGpuList()
     {
         var gl = GpuInfoEgl.Read();
 
@@ -726,9 +713,9 @@ public sealed class AndroidWifiProvider : IWifiProvider
         else if (rawSsid.Length == 0 || rawSsid == "<unknown ssid>") ssid = "Unavailable (turn on Location)";
         else ssid = rawSsid.Trim('"');
 
-        string bssid;
+        string? bssid;
         if (!hasLocation) bssid = "Location permission required";
-        else if (string.IsNullOrEmpty(info.BSSID) || info.BSSID == "02:00:00:00:00:00") bssid = Fmt.NA;
+        else if (string.IsNullOrEmpty(info.BSSID) || info.BSSID == "02:00:00:00:00:00") bssid = null;
         else bssid = info.BSSID;
 
         int rssi = info.Rssi;
@@ -746,7 +733,7 @@ public sealed class AndroidWifiProvider : IWifiProvider
         var dhcp = _wifi.DhcpInfo;
 
         long? sent = null, received = null;
-        string nonMobile = Fmt.NA, mobile = Fmt.NA, download = Fmt.NA, upload = Fmt.NA;
+        string? nonMobile = null, mobile = null, download = null, upload = null;
         if (ReadTraffic() is Traffic tr)
         {
             long nonTx = Math.Max(0, tr.TotalTx - tr.MobileTx);
@@ -766,7 +753,7 @@ public sealed class AndroidWifiProvider : IWifiProvider
         return new WifiSnapshot("Wi-Fi", "Connected", ssid, connectionType, signal, ipv4, ipv6, sent, received)
         {
             WifiStandard = StandardText(info),
-            SignalPercentText = rssiValid ? $"{Math.Clamp(2 * (rssi + 100), 0, 100)}%" : Fmt.NA,
+            SignalPercentText = rssiValid ? $"{Math.Clamp(2 * (rssi + 100), 0, 100)}%" : null,
             Bssid = bssid,
             DhcpServer = dhcp == null ? null : Fmt.IpOrNull(dhcp.ServerAddress),
             Gateway = dhcp == null ? null : Fmt.IpOrNull(dhcp.Gateway),
@@ -853,9 +840,9 @@ public sealed class AndroidWifiProvider : IWifiProvider
         return (ipv6, netmask);
     }
 
-    private static string MaskFromPrefix(int prefix)
+    private static string? MaskFromPrefix(int prefix)
     {
-        if (prefix < 0 || prefix > 32) return Fmt.NA;
+        if (prefix < 0 || prefix > 32) return null;
         uint mask = prefix == 0 ? 0u : 0xFFFFFFFFu << (32 - prefix);
         return $"{(mask >> 24) & 0xFF}.{(mask >> 16) & 0xFF}.{(mask >> 8) & 0xFF}.{mask & 0xFF}";
     }

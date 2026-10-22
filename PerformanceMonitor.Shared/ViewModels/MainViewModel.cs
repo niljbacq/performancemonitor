@@ -5,7 +5,7 @@ namespace TaskManager.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
-    // Reusable view model instances to prevent memory leaks and redundant background loops
+    // Reusable view model instances.
     private readonly HomeViewModel _homeViewModel;
     private readonly CpuViewModel _cpuViewModel;
     private readonly MemoryViewModel _memoryViewModel;
@@ -42,21 +42,43 @@ public partial class MainViewModel : ViewModelBase
         _currentView = _homeViewModel;
     }
 
-    [RelayCommand]
-    private void SelectHome() => CurrentView = _homeViewModel;
+    /// <summary>All tabs sample continuously so opening one shows live data immediately.</summary>
+    public void Resume()
+    {
+        _cpuViewModel.Start();
+        _memoryViewModel.Start();
+        _diskViewModel.Start();
+        _wifiViewModel.Start();
+        _gpuViewModel.Start();
+    }
+
+    /// <summary>Stops all sampling when the app is backgrounded or the view is detached.</summary>
+    public void Pause()
+    {
+        _cpuViewModel.Stop();
+        _memoryViewModel.Stop();
+        _diskViewModel.Stop();
+        _wifiViewModel.Stop();
+        _gpuViewModel.Stop();
+    }
+
+    private void Activate(ViewModelBase next) => CurrentView = next;
 
     [RelayCommand]
-    private void SelectCpu() => CurrentView = _cpuViewModel;
+    private void SelectHome() => Activate(_homeViewModel);
 
     [RelayCommand]
-    private void SelectMemory() => CurrentView = _memoryViewModel;
+    private void SelectCpu() => Activate(_cpuViewModel);
 
     [RelayCommand]
-    private void SelectDisk() => CurrentView = _diskViewModel;
+    private void SelectMemory() => Activate(_memoryViewModel);
 
     [RelayCommand]
-    private void SelectWifi() => CurrentView = _wifiViewModel;
+    private void SelectDisk() => Activate(_diskViewModel);
 
     [RelayCommand]
-    private void SelectGpu() => CurrentView = _gpuViewModel;
+    private void SelectWifi() => Activate(_wifiViewModel);
+
+    [RelayCommand]
+    private void SelectGpu() => Activate(_gpuViewModel);
 }

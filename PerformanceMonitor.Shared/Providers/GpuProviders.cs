@@ -13,13 +13,6 @@ namespace TaskManager.Providers;
 [SupportedOSPlatform("windows")]
 public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
 {
-    // GPU Engine 3D counters, grouped per phys_N adapter ordinal, primed once.
-    private readonly Dictionary<int, List<PerformanceCounter>> _perfCounters = new();
-    private bool _perfCountersBuilt;
-
-    // GPU Adapter Memory counters (bytes per adapter), grouped per phys_N.
-    private readonly Dictionary<int, (List<PerformanceCounter> Dedicated, List<PerformanceCounter> Shared)> _adapterMem = new();
-    private bool _adapterMemBuilt;
     private List<GpuInfo>? _cached;
     private readonly object _lock = new();
 
@@ -149,40 +142,33 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         return list;
     }
 
+    // WMI formatted GPU perf classes keep English names on non-English Windows
+    // (the "GPU Engine" / "GPU Adapter Memory" PerformanceCounter categories do not).
     private IReadOnlyList<float> SamplePerfByPhys()
     {
-        EnsurePerfCounters();
         var byPhys = new SortedDictionary<int, float>();
-        foreach (var kv in _perfCounters)
-        {
-            float total = 0;
-            foreach (var counter in kv.Value)
-                total += counter.NextValue();
-            byPhys[kv.Key] = (float)Math.Min(Math.Round(total, 1), 100);
-        }
-        return byPhys.Values.ToList();
-    }
-
-    private void EnsurePerfCounters()
-    {
-        if (_perfCountersBuilt) return;
-        _perfCountersBuilt = true;
         try
         {
-            var category = new PerformanceCounterCategory("GPU Engine");
-            foreach (var instance in category.GetInstanceNames())
+            using var searcher = new System.Management.ManagementObjectSearcher(
+                "SELECT Name, UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine");
+            foreach (System.Management.ManagementObject obj in searcher.Get())
             {
-                if (!instance.EndsWith("engtype_3D", StringComparison.OrdinalIgnoreCase)) continue;
-                int? phys = PhysIndex(instance);
+                string name = obj["Name"]?.ToString() ?? "";
+                if (!name.EndsWith("engtype_3D", StringComparison.OrdinalIgnoreCase)) continue;
+                int? phys = PhysIndex(name);
                 if (phys == null) continue;
-                var counter = new PerformanceCounter("GPU Engine", "Utilization Percentage", instance);
-                counter.NextValue(); // prime the rate baseline
-                if (!_perfCounters.TryGetValue(phys.Value, out var list))
-                    _perfCounters[phys.Value] = list = new List<PerformanceCounter>();
-                list.Add(counter);
+
+                float value = (float)Convert.ToDouble(obj["UtilizationPercentage"]);
+                byPhys[phys.Value] = byPhys.TryGetValue(phys.Value, out float sum)
+                    ? sum + value
+                    : value;
             }
         }
         catch { }
+
+        foreach (int key in byPhys.Keys.ToList())
+            byPhys[key] = (float)Math.Min(Math.Round(byPhys[key], 1), 100);
+        return byPhys.Values.ToList();
     }
 
     private static int? PhysIndex(string instance)
@@ -198,45 +184,26 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
 
     private SortedDictionary<int, (long Dedicated, long Shared)> SampleAdapterMemoryByPhys()
     {
-        EnsureAdapterMemoryCounters();
         var byPhys = new SortedDictionary<int, (long, long)>();
-        foreach (var kv in _adapterMem)
-        {
-            long dedicated = 0, shared = 0;
-            foreach (var c in kv.Value.Dedicated) dedicated += (long)c.NextValue();
-            foreach (var c in kv.Value.Shared) shared += (long)c.NextValue();
-            byPhys[kv.Key] = (dedicated, shared);
-        }
-        return byPhys;
-    }
-
-    private void EnsureAdapterMemoryCounters()
-    {
-        if (_adapterMemBuilt) return;
-        _adapterMemBuilt = true;
         try
         {
-            var category = new PerformanceCounterCategory("GPU Adapter Memory");
-            foreach (var instance in category.GetInstanceNames())
+            using var searcher = new System.Management.ManagementObjectSearcher(
+                "SELECT Name, DedicatedUsage, SharedUsage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory");
+            foreach (System.Management.ManagementObject obj in searcher.Get())
             {
-                int? phys = PhysIndex(instance);
+                string name = obj["Name"]?.ToString() ?? "";
+                int? phys = PhysIndex(name);
                 if (phys == null) continue;
 
-                var dedicated = new PerformanceCounter("GPU Adapter Memory", "Dedicated Usage", instance, true);
-                var shared = new PerformanceCounter("GPU Adapter Memory", "Shared Usage", instance, true);
-                dedicated.NextValue();
-                shared.NextValue();
-
-                if (!_adapterMem.TryGetValue(phys.Value, out var lists))
-                {
-                    lists = (new List<PerformanceCounter>(), new List<PerformanceCounter>());
-                    _adapterMem[phys.Value] = lists;
-                }
-                lists.Dedicated.Add(dedicated);
-                lists.Shared.Add(shared);
+                long dedicated = Convert.ToInt64(obj["DedicatedUsage"]);
+                long shared = Convert.ToInt64(obj["SharedUsage"]);
+                byPhys[phys.Value] = byPhys.TryGetValue(phys.Value, out var sum)
+                    ? (sum.Item1 + dedicated, sum.Item2 + shared)
+                    : (dedicated, shared);
             }
         }
         catch { }
+        return byPhys;
     }
 
     // Display-adapter total VRAM from the registry. Win32_VideoController.AdapterRAM

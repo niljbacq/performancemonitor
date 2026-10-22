@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace TaskManager.Providers;
 
@@ -10,7 +11,6 @@ namespace TaskManager.Providers;
 public sealed class CpuSpecs
 {
     public string? Name { get; set; }
-    public string? MarketingName { get; set; }
     public string? BaseSpeed { get; set; }
     public string? Speed { get; set; }
     public string? Cores { get; set; }
@@ -208,21 +208,29 @@ internal static class CommandRunner
     {
         try
         {
-            using var process = new Process
+            var startInfo = new ProcessStartInfo
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = command,
-                    Arguments = arguments,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
+                FileName = command,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
             };
+            // Keep CLI output (lscpu, nmcli, iw, netsh) in a stable language.
+            startInfo.Environment["LC_ALL"] = "C";
+            startInfo.Environment["LANG"] = "C";
+
+            using var process = new Process { StartInfo = startInfo };
             process.Start();
-            string result = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(timeoutMs);
-            return result;
+
+            Task<string> read = process.StandardOutput.ReadToEndAsync();
+            if (!process.WaitForExit(timeoutMs))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return string.Empty;
+            }
+
+            return read.Wait(timeoutMs) ? read.Result : string.Empty;
         }
         catch
         {

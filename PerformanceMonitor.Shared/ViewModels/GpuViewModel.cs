@@ -50,6 +50,8 @@ public partial class GpuViewModel : ViewModelBase
 
     private readonly IGpuProvider _provider;
     private readonly IGpuListProvider? _listProvider;
+    private CancellationTokenSource? _cts;
+    private bool _specsLoaded;
 
     public GpuViewModel() : this(ProviderFactory.CreateGpu()) { }
 
@@ -57,8 +59,27 @@ public partial class GpuViewModel : ViewModelBase
     {
         _provider = provider;
         _listProvider = provider as IGpuListProvider;
-        _ = LoadGpuSpecsAsync();
-        _ = StartMonitoringAsync();
+    }
+
+    public void Start()
+    {
+        if (_cts != null) return;
+        _cts = new CancellationTokenSource();
+
+        if (!_specsLoaded)
+        {
+            _specsLoaded = true;
+            _ = LoadGpuSpecsAsync();
+        }
+
+        _ = StartMonitoringAsync(_cts.Token);
+    }
+
+    public void Stop()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
     }
 
     private async Task LoadGpuSpecsAsync()
@@ -130,72 +151,86 @@ public partial class GpuViewModel : ViewModelBase
         }
     }
 
-    private async Task StartMonitoringAsync()
+    private async Task StartMonitoringAsync(CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         int tick = 0;
 
-        while (await timer.WaitForNextTickAsync().ConfigureAwait(false))
+        try
         {
-            tick++;
-            if (tick % 2 != 1) continue;
-
-            try
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                if (_listProvider != null)
+                tick++;
+                if (tick % 2 != 1) continue;
+
+                try
                 {
-                    var samples = _listProvider.SampleGpuList();
-                    var igpu = PickPrimary(samples, GpuInfo => GpuInfo.Kind == "Integrated");
-                    var dgpu = PickPrimary(samples, GpuInfo => GpuInfo.Kind == "Dedicated");
-
-                    Dispatcher.UIThread.Post(() =>
+                    if (_listProvider != null)
                     {
-                        if (igpu != null) Integrated.UpdateSample(igpu);
-                        if (dgpu != null) Dedicated.UpdateSample(dgpu);
+                        var samples = _listProvider.SampleGpuList();
+                        var igpu = PickPrimary(samples, GpuInfo => GpuInfo.Kind == "Integrated");
+                        var dgpu = PickPrimary(samples, GpuInfo => GpuInfo.Kind == "Dedicated");
 
-                        var primary = GpuMapPrimary(samples);
-                        if (primary != null) ApplySampleToFlat(primary);
-                    });
-                }
-                else
-                {
-                    var sample = _provider.Sample();
-                    if (sample == null) continue;
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (sample.Utilization is double u)
+                        Dispatcher.UIThread.Post(() =>
                         {
-                            UtilizationValue = u;
-                            Utilization = $"{u:0}%";
-                        }
-                        if (sample.UtilizationText != null && sample.Utilization == null) Utilization = sample.UtilizationText;
-                        if (sample.TemperatureC is double t) Temperature = $"{t} °C";
-                        if (sample.TemperatureText != null) Temperature = sample.TemperatureText;
-                        if (sample.MemoryUsage != null) MemoryUsage = sample.MemoryUsage;
+                            if (igpu != null) Integrated.UpdateSample(igpu); else Integrated.ResetToEmpty();
+                            if (dgpu != null) Dedicated.UpdateSample(dgpu); else Dedicated.ResetToEmpty();
 
-                        // Route the same sample to whichever sub-VM holds the GPU.
-                        if (Dedicated.HasGpu) Dedicated.UpdateSample(sample);
-                        else if (Integrated.HasGpu) Integrated.UpdateSample(sample);
-                    });
+                            var primary = GpuMapPrimary(samples);
+                            if (primary != null) ApplySampleToFlat(primary);
+                            else ClearFlatSample();
+                        });
+                    }
+                    else
+                    {
+                        var sample = _provider.Sample();
+
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            if (sample == null)
+                            {
+                                ClearFlatSample();
+                                return;
+                            }
+
+                            ApplySampleToFlat(sample);
+
+                            // Route the same sample to whichever sub-VM holds the GPU.
+                            if (Dedicated.HasGpu) Dedicated.UpdateSample(sample);
+                            else if (Integrated.HasGpu) Integrated.UpdateSample(sample);
+                        });
+                    }
                 }
+                catch { }
             }
-            catch { }
         }
+        catch (OperationCanceledException) { }
+    }
+
+    private void ClearFlatSample()
+    {
+        Utilization = null;
+        UtilizationValue = 0;
+        Temperature = null;
+        MemoryUsage = null;
+        SharedMemoryUsage = null;
     }
 
     private void ApplySampleToFlat(GpuInfo d)
     {
-        if (d.Utilization is double u)
-        {
-            UtilizationValue = u;
-            Utilization = $"{u:0}%";
-        }
-        if (d.UtilizationText != null && d.Utilization == null) Utilization = d.UtilizationText;
-        if (d.TemperatureC is double t) Temperature = $"{t} °C";
-        if (d.TemperatureText != null) Temperature = d.TemperatureText;
-        if (d.MemoryUsage != null) MemoryUsage = d.MemoryUsage;
-        if (d.SharedMemoryUsage != null) SharedMemoryUsage = d.SharedMemoryUsage;
+        UtilizationValue = d.Utilization ?? 0;
+        Utilization = d.Utilization is double u ? $"{u:0}%" : d.UtilizationText;
+        Temperature = d.TemperatureC is double t ? $"{t} °C" : d.TemperatureText;
+        MemoryUsage = d.MemoryUsage;
+        SharedMemoryUsage = d.SharedMemoryUsage;
+    }
+
+    private void ApplySampleToFlat(GpuSample d)
+    {
+        UtilizationValue = d.Utilization ?? 0;
+        Utilization = d.Utilization is double u ? $"{u:0}%" : d.UtilizationText;
+        Temperature = d.TemperatureC is double t ? $"{t} °C" : d.TemperatureText;
+        MemoryUsage = d.MemoryUsage;
     }
 
     private static GpuInfo? PickPrimary(IReadOnlyList<GpuInfo> list, Func<GpuInfo, bool> match)
@@ -285,37 +320,21 @@ public partial class GpuSubViewModel : ViewModelBase
     public void UpdateSample(GpuInfo g)
     {
         HasUtilizationValue = g.Utilization is double;
-        if (g.Utilization is double u)
-        {
-            UtilizationValue = u;
-            Utilization = $"{u:0}%";
-        }
-        if (g.UtilizationText != null && g.Utilization == null)
-            Utilization = g.UtilizationText;
-        if (g.TemperatureC is double t)
-            Temperature = $"{t} °C";
-        if (g.TemperatureText != null)
-            Temperature = g.TemperatureText;
-        if (g.MemoryUsage != null)
-            MemoryUsage = g.MemoryUsage;
-        if (g.SharedMemoryUsage != null)
-            SharedMemoryUsage = g.SharedMemoryUsage;
-        if (g.Vendor != null)
-            Vendor = g.Vendor;
+        UtilizationValue = g.Utilization ?? 0;
+        Utilization = g.Utilization is double u ? $"{u:0}%" : g.UtilizationText;
+        Temperature = g.TemperatureC is double t ? $"{t} °C" : g.TemperatureText;
+        MemoryUsage = g.MemoryUsage;
+        SharedMemoryUsage = g.SharedMemoryUsage;
+        Vendor = g.Vendor;
     }
 
     public void UpdateSample(GpuSample s)
     {
         HasUtilizationValue = s.Utilization is double;
-        if (s.Utilization is double u)
-        {
-            UtilizationValue = u;
-            Utilization = $"{u:0}%";
-        }
-        if (s.UtilizationText != null && s.Utilization == null) Utilization = s.UtilizationText;
-        if (s.TemperatureC is double t) Temperature = $"{t} °C";
-        if (s.TemperatureText != null) Temperature = s.TemperatureText;
-        if (s.MemoryUsage != null) MemoryUsage = s.MemoryUsage;
+        UtilizationValue = s.Utilization ?? 0;
+        Utilization = s.Utilization is double u ? $"{u:0}%" : s.UtilizationText;
+        Temperature = s.TemperatureC is double t ? $"{t} °C" : s.TemperatureText;
+        MemoryUsage = s.MemoryUsage;
     }
 
     public void ResetToEmpty()

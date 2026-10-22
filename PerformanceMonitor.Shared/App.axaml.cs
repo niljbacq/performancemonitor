@@ -9,6 +9,8 @@ namespace TaskManager;
 
 public partial class App : Application
 {
+    public MainViewModel? MainViewModel { get; private set; }
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -21,20 +23,23 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            MainViewModel = new MainViewModel();
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainViewModel(),
+                DataContext = MainViewModel,
             };
         }
         else if (ApplicationLifetime is IActivityApplicationLifetime activityLifetime)
         {
             // Android may build the view more than once, so create ONE view model and share it.
-            var vm = new MainViewModel();
+            MainViewModel = new MainViewModel();
+            var vm = MainViewModel;
             activityLifetime.MainViewFactory = () => new MainView { DataContext = vm };
         }
         else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
         {
-            singleView.MainView = new MainView { DataContext = new MainViewModel() };
+            MainViewModel = new MainViewModel();
+            singleView.MainView = new MainView { DataContext = MainViewModel };
         }
 
         base.OnFrameworkInitializationCompleted();

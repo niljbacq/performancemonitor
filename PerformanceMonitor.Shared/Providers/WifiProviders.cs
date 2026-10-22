@@ -15,26 +15,42 @@ public sealed class WindowsWifiProvider : IWifiProvider
     {
         string output = CommandRunner.Run("netsh", "wlan show interfaces", 2000);
 
-        var stateMatch = Regex.Match(output, @"^\s*State\s*:\s*(.+)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-        string state = stateMatch.Success ? stateMatch.Groups[1].Value.Trim() : "Disconnected";
-
-        if (state.Equals("connected", StringComparison.OrdinalIgnoreCase))
+        // netsh labels are localised, but the values are not. Pair every
+        // "label: value" line and identify fields by their value shape.
+        var pairs = new List<(string Label, string Value)>();
+        foreach (string line in output.Split('\n'))
         {
-            var ssidMatch = Regex.Match(output, @"^\s*SSID\s*:\s*(.+)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-            string ssid = ssidMatch.Success && !string.IsNullOrWhiteSpace(ssidMatch.Groups[1].Value)
-                ? ssidMatch.Groups[1].Value.Trim()
-                : "Connected";
-
-            var radioMatch = Regex.Match(output, @"^\s*Radio type\s*:\s*(.+)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-            string connectionType = radioMatch.Success ? radioMatch.Groups[1].Value.Trim() : "Unknown";
-
-            var signalMatch = Regex.Match(output, @"^\s*Signal\s*:\s*(.+)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-            string signal = signalMatch.Success ? $"📶 {signalMatch.Groups[1].Value.Trim()}" : "-";
-
-            return new WifiDetails("Connected", ssid, connectionType, signal);
+            int colon = line.IndexOf(':');
+            if (colon <= 0) continue;
+            pairs.Add((line[..colon].Trim(), line[(colon + 1)..].Trim()));
         }
 
-        return new WifiDetails("Disconnected", "Not connected", "Unknown", "-");
+        int bssidIndex = pairs.FindIndex(p =>
+            Regex.IsMatch(p.Value, @"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
+
+        string? ssid = null;
+        if (bssidIndex > 0)
+        {
+            string candidate = pairs[bssidIndex - 1].Value;
+            if (candidate.Length > 0) ssid = candidate;
+        }
+
+        string? signal = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^\d{1,3}\s*%$")).Value;
+        string? radio = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^802\.11")).Value;
+
+        NetworkInterface? nic = NetworkInterface.GetAllNetworkInterfaces()
+            .FirstOrDefault(n => n.Name == interfaceName);
+        bool connected = bssidIndex >= 0
+                         || (nic?.OperationalStatus == OperationalStatus.Up && ssid != null);
+
+        if (!connected)
+            return new WifiDetails("Disconnected", "Not connected", radio ?? "-", "-");
+
+        return new WifiDetails(
+            "Connected",
+            ssid ?? "Connected",
+            radio ?? "-",
+            signal != null ? $"📶 {signal}" : "-");
     }
 }
 

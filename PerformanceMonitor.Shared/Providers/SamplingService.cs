@@ -152,7 +152,7 @@ public sealed class SamplingService : IDisposable
         try
         {
             float raw = _cpu.GetUsagePercent();
-            if (_cpu.UsageUnavailableMessage == null) cpu = raw;
+            if (_cpu.UsageUnavailableMessage == null && raw >= 0) cpu = raw;
         }
         catch { }
 
@@ -160,9 +160,12 @@ public sealed class SamplingService : IDisposable
         try
         {
             var m = _memory.GetUsage();
-            usedGb = m.UsedGB;
-            totalGb = m.TotalGB;
-            memPercent = m.Percent;
+            if (m.TotalGB > 0)
+            {
+                usedGb = m.UsedGB;
+                totalGb = m.TotalGB;
+                memPercent = m.Percent;
+            }
         }
         catch { }
 

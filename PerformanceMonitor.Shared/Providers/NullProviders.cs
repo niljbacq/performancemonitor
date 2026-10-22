@@ -4,7 +4,8 @@ public sealed class NullCpuProvider : ICpuProvider
 {
     public CpuSpecs GetSpecs() => new() { Name = "Not available" };
     public float GetUsagePercent() => 0;
-    public ProcessStats GetProcessStats() => new(0, 0, "N/A");
+    public ProcessStats GetProcessStats() => new(null, null, null);
+    public string? UsageUnavailableMessage => "Not available on this platform";
 }
 
 public sealed class NullGpuProvider : IGpuProvider
