@@ -1,0 +1,79 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:TaskManager.ViewModels"
+        x:Class="TaskManager.Views.OverlayWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Performance Overlay"
+        Width="230"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowDecorations="None"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        WindowStartupLocation="Manual"
+        Background="#1E1E1E">
+
+    <!-- shortcut: opaque panel; add compositor-aware transparency later if wanted. -->
+    <Border Background="#252526" BorderBrush="#333333" BorderThickness="1" Padding="12"
+            PointerPressed="OnDrag">
+        <StackPanel Spacing="8">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="×" Click="OnClose"
+                        AutomationProperties.Name="Close overlay"
+                        Width="22" Height="22" Padding="0"
+                        Background="Transparent" Foreground="#AAAAAA"
+                        FontSize="16" HorizontalContentAlignment="Center"/>
+                <TextBlock Text="Performance" FontSize="11" Foreground="#888888"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+
+            <StackPanel Spacing="3" IsVisible="{Binding Cpu.HasUtilization}">
+                <Grid ColumnDefinitions="*, Auto">
+                    <TextBlock Text="CPU" FontSize="12" Foreground="#CCCCCC"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Cpu.Utilization}"
+                               FontSize="12" Foreground="White"
+                               MaxWidth="140" TextTrimming="CharacterEllipsis"/>
+                </Grid>
+                <ProgressBar Value="{Binding Cpu.UtilizationValue}" Minimum="0" Maximum="100"
+                             Height="4" Foreground="#0078D4" Background="#333333"/>
+            </StackPanel>
+
+            <StackPanel Spacing="3"
+                        IsVisible="{Binding Memory.MemoryUsagePercent, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <Grid ColumnDefinitions="*, Auto">
+                    <TextBlock Text="Memory" FontSize="12" Foreground="#CCCCCC"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Memory.MemoryUsagePercent}"
+                               FontSize="12" Foreground="White"
+                               MaxWidth="140" TextTrimming="CharacterEllipsis"/>
+                </Grid>
+                <ProgressBar Value="{Binding Memory.MemoryUsagePercentValue}" Minimum="0" Maximum="100"
+                             Height="4" Foreground="#0078D4" Background="#333333"/>
+            </StackPanel>
+
+            <StackPanel Spacing="3" IsVisible="{Binding Gpu.HasUtilization}">
+                <Grid ColumnDefinitions="*, Auto">
+                    <TextBlock Text="GPU" FontSize="12" Foreground="#CCCCCC"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Gpu.Utilization}"
+                               FontSize="12" Foreground="White"
+                               MaxWidth="140" TextTrimming="CharacterEllipsis"/>
+                </Grid>
+                <ProgressBar Value="{Binding Gpu.UtilizationValue}" Minimum="0" Maximum="100"
+                             Height="4" Foreground="#0078D4" Background="#333333"/>
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*, Auto"
+                  IsVisible="{Binding Gpu.Temperature, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock Text="GPU temp" FontSize="12" Foreground="#CCCCCC"/>
+                <TextBlock Grid.Column="1" Text="{Binding Gpu.Temperature}"
+                           FontSize="12" Foreground="White"/>
+            </Grid>
+
+            <Grid ColumnDefinitions="*, Auto">
+                <TextBlock Text="FPS" FontSize="12" Foreground="#CCCCCC"/>
+                <TextBlock x:Name="FpsValue" Grid.Column="1" Text="—"
+                           FontSize="12" Foreground="White"/>
+            </Grid>
+        </StackPanel>
+    </Border>
+</Window>
