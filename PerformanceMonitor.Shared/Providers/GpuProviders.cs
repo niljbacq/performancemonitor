@@ -4,8 +4,10 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Win32;
 
 namespace TaskManager.Providers;
@@ -574,6 +576,11 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
     // (deltas of /proc/<pid>/fdinfo drm-engine-* sums over the sample window).
     private readonly Dictionary<string, (DateTime At, long BusyNs)> _busyBaseline = new();
 
+    // Legacy radeon has no fdinfo engine counters. Its GPU-busy register is
+    // readable unprivileged through the DRM render node, so keep one sampler
+    // per render node instead of depending on radeontop.
+    private readonly Dictionary<string, RadeonLoadSampler> _radeonSamplers = new();
+
     public GpuSpecs GetSpecs()
     {
         var primary = GpuMap.Primary(GetGpuList());
@@ -647,8 +654,8 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
                 {
                     bool radeon = info.DriverVersion != null &&
                         info.DriverVersion.StartsWith("radeon", StringComparison.OrdinalIgnoreCase);
-                    if (radeon)
-                        info.UtilizationText = RadeonUtilReason(info);
+                    if (radeon && !IsRadeonWarming(info))
+                        info.UtilizationText = RadeonUtilReason();
                 }
             }
         }
@@ -656,22 +663,8 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         _busyBaseline[key] = (now, busyNs);
     }
 
-    private static string RadeonUtilReason(GpuInfo info)
-    {
-        const string dbg = "/sys/kernel/debug";
-        if (!Directory.Exists(dbg))
-            return "Requires debugfs mount for radeon utilization (sudo mount -t debugfs none /sys/kernel/debug)";
-        try
-        {
-            if (!Directory.EnumerateFileSystemEntries(dbg).Any())
-                return "Requires debugfs mount for radeon utilization (sudo mount -t debugfs none /sys/kernel/debug)";
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return "debugfs is mounted but root-only; radeon_pm_info is not readable";
-        }
-        return "radeon_pm_info has no GPU load counter on this GPU";
-    }
+    private static string RadeonUtilReason()
+        => "radeon GPU load unavailable (DRM render node inaccessible or unsupported)";
 
     // drm-engine-* totals in fdinfo are grouped under a "drm-pdev: <pci slot>" header
     // for each open GPU fd. We sum engine ns only for the block whose drm-pdev matches
@@ -791,10 +784,16 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         }
 
         NvidiaSmi.Apply(list, NvidiaSmi.Query(), includeLive: false);
+
+        // Start the radeon register sampler as soon as the GPU list is known,
+        // so the first GPU sample usually has a real value already.
+        foreach (var gpu in list)
+            _ = GetRadeonSampler(gpu);
+
         return list;
     }
 
-    private static void FillSysfsSample(GpuInfo info)
+    private void FillSysfsSample(GpuInfo info)
     {
         if (string.IsNullOrEmpty(info.DeviceId)) return;
         string device = Path.Combine(DrmRoot, info.DeviceId, "device");
@@ -802,11 +801,10 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         string busyPath = Path.Combine(device, "gpu_busy_percent");
         if (TryReadDouble(busyPath, out double busy))
             info.Utilization = busy;
-        else if (!TryDebugfsLoad(info))
+        else if (!TryRadeonRegisterUtilization(info) && !TryDebugfsLoad(info))
         {
-            // No amdgpu-style counter and no debugfs pm_info file. As a last
-            // resort ask radeontop, which reads the GPU busy register over DRM
-            // and needs neither debugfs nor root.
+            // Fall back to the external radeontop tool only if the in-process
+            // DRM reader and debugfs both failed.
             if (!TryRadeontopUtilization(info))
                 info.UtilizationText = DebugfsReason(device);
         }
@@ -817,14 +815,101 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         string? vram = FormatBytePair(
             ReadLong(Path.Combine(device, "mem_info_vram_used")),
             ReadLong(Path.Combine(device, "mem_info_vram_total")));
-        if (vram != null) info.MemoryUsage = vram;
-        else if (ReadDriverName(device) == "radeon")
-            info.MemoryUsage = "Not exposed by radeon (amdgpu only)";
-
         string? gtt = FormatBytePair(
             ReadLong(Path.Combine(device, "mem_info_gtt_used")),
             ReadLong(Path.Combine(device, "mem_info_gtt_total")));
+
+        // Legacy radeon has no mem_info sysfs files; its sampler reads VRAM and
+        // GTT usage through the same render node it uses for GPU load.
+        if (vram == null && ReadDriverName(device) == "radeon")
+        {
+            var sampler = GetRadeonSampler(info);
+            if (sampler is { } s)
+            {
+                var (radeonVram, radeonGtt) = s.Memory;
+                if (radeonVram != null)
+                {
+                    vram = radeonVram;
+                    gtt ??= radeonGtt;
+                }
+                else if (!s.Warming)
+                {
+                    info.MemoryUsage =
+                        "radeon GPU memory unavailable (DRM render node inaccessible or unsupported)";
+                }
+            }
+            else
+            {
+                info.MemoryUsage =
+                    "radeon GPU memory unavailable (DRM render node inaccessible or unsupported)";
+            }
+        }
+
+        if (vram != null) info.MemoryUsage = vram;
         if (gtt != null) info.SharedMemoryUsage = gtt;
+    }
+
+    private bool TryRadeonRegisterUtilization(GpuInfo info)
+    {
+        var sampler = GetRadeonSampler(info);
+        if (sampler == null) return false;
+        if (sampler.Percent is double pct)
+        {
+            info.Utilization = pct;
+            info.UtilizationText = null;
+            return true;
+        }
+        // The first one-second average is still being collected. Treat that as
+        // handled so the UI stays blank instead of briefly claiming the node is
+        // inaccessible.
+        return sampler.Warming;
+    }
+
+    private bool IsRadeonWarming(GpuInfo info)
+    {
+        string? node = FindRenderNode(info.DeviceId);
+        if (node == null) return false;
+        lock (_lock)
+            return _radeonSamplers.TryGetValue(node, out var sampler) && sampler.Warming;
+    }
+
+    private RadeonLoadSampler? GetRadeonSampler(GpuInfo info)
+    {
+        if (info.DriverVersion == null ||
+            !info.DriverVersion.StartsWith("radeon", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        string? node = FindRenderNode(info.DeviceId);
+        if (node == null) return null;
+
+        lock (_lock)
+        {
+            if (!_radeonSamplers.TryGetValue(node, out var sampler))
+            {
+                sampler = new RadeonLoadSampler(node);
+                _radeonSamplers[node] = sampler;
+                sampler.Start();
+            }
+            return sampler;
+        }
+    }
+
+    private static string? FindRenderNode(string? card)
+    {
+        if (string.IsNullOrEmpty(card)) return null;
+        try
+        {
+            string dir = Path.Combine(DrmRoot, card, "device", "drm");
+            if (!Directory.Exists(dir)) return null;
+            foreach (string entry in Directory.EnumerateFileSystemEntries(dir))
+            {
+                string name = Path.GetFileName(entry);
+                if (name.StartsWith("renderD", StringComparison.Ordinal))
+                    return Path.Combine("/dev/dri", name);
+            }
+        }
+        catch { }
+        return null;
     }
 
     private static bool TryDebugfsLoad(GpuInfo info)
@@ -950,7 +1035,7 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
         if (!mounted)
             return "Requires debugfs mount for " + driver + " utilization (sudo mount -t debugfs none /sys/kernel/debug)";
         return driver == "radeon"
-            ? "Requires readable /sys/kernel/debug/dri/*/radeon_pm_info (debugfs is root-only by default)"
+            ? "radeon GPU load unavailable (DRM render node inaccessible or unsupported)"
             : $"Utilization not exposed by the {driver} driver";
     }
 
@@ -1136,5 +1221,175 @@ public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
     {
         try { return File.Exists(path) ? File.ReadAllText(path).Trim() : null; }
         catch { return null; }
+    }
+
+    private sealed class RadeonLoadSampler
+    {
+        private const uint ReadRegRequest = 0x24;
+        private const uint VramUsageRequest = 0x1e;
+        private const uint GttUsageRequest = 0x1f;
+        private const uint GrbmStatus = 0x8010;
+        private const uint GuiBit = 1u << 31;
+        // _IOWR('d', 0x40 + 0x27, struct drm_radeon_info) with a 16-byte struct.
+        private const uint IoctlRadeonInfo = 0xC0106467;
+        // _IOWR('d', 0x40 + 0x1c, struct drm_radeon_gem_info) with a 24-byte struct.
+        private const uint IoctlRadeonGemInfo = 0xC018645C;
+        private const int O_RdWr = 2;
+        private const int O_CloExec = 0x80000;
+        private const int SampleMs = 20;
+        private const int WindowMs = 1000;
+
+        private readonly string _node;
+        private readonly object _gate = new();
+        private double? _percent;
+        private string? _vramText;
+        private string? _gttText;
+        private bool _unavailable;
+        private int _started;
+
+        public RadeonLoadSampler(string node) => _node = node;
+
+        public double? Percent
+        {
+            get { lock (_gate) return _percent; }
+        }
+
+        public (string? Vram, string? Gtt) Memory
+        {
+            get { lock (_gate) return (_vramText, _gttText); }
+        }
+
+        public bool Warming
+        {
+            get { lock (_gate) return _percent == null && !_unavailable; }
+        }
+
+        public void Start()
+        {
+            if (Interlocked.Exchange(ref _started, 1) != 0) return;
+            var thread = new Thread(Run) { IsBackground = true, Name = "radeon-gpu-load" };
+            thread.Start();
+        }
+
+        private void Run()
+        {
+            try
+            {
+                int fd = open(_node, O_RdWr | O_CloExec);
+                if (fd < 0) return;
+                try
+                {
+                    IntPtr value = Marshal.AllocHGlobal(sizeof(ulong));
+                    try
+                    {
+                        ReadMemory(fd, value);
+                        int busy = 0, total = 0, failures = 0;
+                        var window = Stopwatch.StartNew();
+                        while (true)
+                        {
+                            if (!ReadRegister(fd, value, GrbmStatus, out uint status))
+                            {
+                                if (++failures >= 3) return;
+                                Thread.Sleep(500);
+                                continue;
+                            }
+                            failures = 0;
+                            total++;
+                            // shortcut: 50 Hz sampling of the GUI-busy bit over
+                            // 1 s; radeontop uses 120 Hz. Fine for a usage
+                            // graph, increase if short bursts matter.
+                            if ((status & GuiBit) != 0) busy++;
+                            if (window.ElapsedMilliseconds >= WindowMs)
+                            {
+                                double pct = total == 0 ? 0 : busy * 100.0 / total;
+                                lock (_gate) _percent = Math.Round(pct, 1);
+                                busy = 0;
+                                total = 0;
+                                window.Restart();
+                                ReadMemory(fd, value);
+                            }
+                            Thread.Sleep(SampleMs);
+                        }
+                    }
+                    finally { Marshal.FreeHGlobal(value); }
+                }
+                finally { close(fd); }
+            }
+            catch { }
+            finally
+            {
+                lock (_gate)
+                {
+                    _percent = null;
+                    _vramText = null;
+                    _gttText = null;
+                    _unavailable = true;
+                }
+            }
+        }
+
+        private void ReadMemory(int fd, IntPtr buffer)
+        {
+            var gem = new RadeonGemInfo();
+            long? vramTotal = null, gttTotal = null;
+            if (ioctlGem(fd, (UIntPtr)IoctlRadeonGemInfo, ref gem) == 0)
+            {
+                vramTotal = (long)gem.VramSize;
+                gttTotal = (long)gem.GartSize;
+            }
+
+            string? vram = FormatBytePair(ReadUsage(fd, buffer, VramUsageRequest), vramTotal);
+            string? gtt = FormatBytePair(ReadUsage(fd, buffer, GttUsageRequest), gttTotal);
+            lock (_gate)
+            {
+                _vramText = vram;
+                _gttText = gtt;
+            }
+        }
+
+        private static long? ReadUsage(int fd, IntPtr buffer, uint request)
+        {
+            var info = new RadeonInfo { Request = request, Value = (ulong)buffer };
+            if (ioctl(fd, (UIntPtr)IoctlRadeonInfo, ref info) != 0) return null;
+            return Marshal.ReadInt64(buffer);
+        }
+
+        private static bool ReadRegister(int fd, IntPtr buffer, uint register, out uint value)
+        {
+            value = 0;
+            Marshal.WriteInt32(buffer, 0, unchecked((int)register));
+            var info = new RadeonInfo { Request = ReadRegRequest, Value = (ulong)buffer };
+            if (ioctl(fd, (UIntPtr)IoctlRadeonInfo, ref info) != 0) return false;
+            value = unchecked((uint)Marshal.ReadInt32(buffer));
+            return true;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RadeonInfo
+        {
+            public uint Request;
+            public uint Pad;
+            public ulong Value;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RadeonGemInfo
+        {
+            public ulong GartSize;
+            public ulong VramSize;
+            public ulong VramVisible;
+        }
+
+        [DllImport("libc", SetLastError = true)]
+        private static extern int open(string path, int flags);
+
+        [DllImport("libc", SetLastError = true)]
+        private static extern int ioctl(int fd, UIntPtr request, ref RadeonInfo arg);
+
+        [DllImport("libc", SetLastError = true, EntryPoint = "ioctl")]
+        private static extern int ioctlGem(int fd, UIntPtr request, ref RadeonGemInfo arg);
+
+        [DllImport("libc", SetLastError = true)]
+        private static extern int close(int fd);
     }
 }

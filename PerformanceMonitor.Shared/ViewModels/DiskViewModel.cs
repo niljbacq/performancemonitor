@@ -13,8 +13,8 @@ public partial class DiskViewModel : ViewModelBase
     private string _diskName = "Disk";
     public string DiskName { get => _diskName; set => SetProperty(ref _diskName, value); }
 
-    private string _modelName = "Detecting Disk...";
-    public string ModelName { get => _modelName; set => SetProperty(ref _modelName, value); }
+    private string? _modelName;
+    public string? ModelName { get => _modelName; set => SetProperty(ref _modelName, value); }
 
     private string? _activeTime;
     public string? ActiveTime { get => _activeTime; set => SetProperty(ref _activeTime, value); }
@@ -107,7 +107,7 @@ public partial class DiskViewModel : ViewModelBase
     private void ApplySingleSpec(DiskSpecs s)
     {
         if (s.DiskName != null) DiskName = s.DiskName;
-        if (s.ModelName != null) ModelName = s.ModelName;
+        ModelName = s.ModelName;
         if (s.Capacity != null) Capacity = s.Capacity;
         if (s.Formatted != null) Formatted = s.Formatted;
         if (s.SystemDisk != null) SystemDisk = s.SystemDisk;
@@ -169,7 +169,7 @@ public partial class DiskViewModel : ViewModelBase
         if (primary != null)
         {
             DiskName = primary.DiskName ?? "Disk";
-            ModelName = primary.ModelName ?? "Generic Storage Device";
+            ModelName = primary.ModelName;
             Capacity = primary.Capacity ?? "-";
             Formatted = primary.Formatted ?? "-";
             SystemDisk = primary.SystemDisk ?? "No";
@@ -316,8 +316,18 @@ public partial class DiskSubViewModel : ViewModelBase
     private string _diskName = "";
     public string DiskName { get => _diskName; set => SetProperty(ref _diskName, value); }
 
-    private string _modelName = "";
-    public string ModelName { get => _modelName; set => SetProperty(ref _modelName, value); }
+    private string? _modelName;
+    public string? ModelName
+    {
+        get => _modelName;
+        set
+        {
+            if (SetProperty(ref _modelName, value))
+                OnPropertyChanged(nameof(HasModelName));
+        }
+    }
+
+    public bool HasModelName => !string.IsNullOrWhiteSpace(ModelName);
 
     private string? _activeTime;
     public string? ActiveTime { get => _activeTime; set => SetProperty(ref _activeTime, value); }
@@ -375,7 +385,7 @@ public partial class DiskSubViewModel : ViewModelBase
     {
         HasDisk = true;
         DiskName = d.DiskName ?? "Disk";
-        ModelName = d.ModelName ?? "Generic Storage Device";
+        ModelName = d.ModelName;
         Capacity = d.Capacity ?? "-";
         Formatted = d.Formatted ?? "-";
         SystemDisk = d.SystemDisk;
@@ -436,7 +446,7 @@ public partial class DiskSubViewModel : ViewModelBase
     {
         HasDisk = false;
         DiskName = "";
-        ModelName = EmptyLabel;
+        ModelName = null;
         Capacity = "-";
         Formatted = "-";
         SystemDisk = null;

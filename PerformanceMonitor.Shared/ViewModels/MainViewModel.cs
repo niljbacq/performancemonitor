@@ -42,6 +42,10 @@ public partial class MainViewModel : ViewModelBase
         _currentView = _homeViewModel;
     }
 
+    public CpuViewModel Cpu => _cpuViewModel;
+    public MemoryViewModel Memory => _memoryViewModel;
+    public GpuViewModel Gpu => _gpuViewModel;
+
     /// <summary>All tabs sample continuously so opening one shows live data immediately.</summary>
     public void Resume()
     {
@@ -81,4 +85,7 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void SelectGpu() => Activate(_gpuViewModel);
+
+    [RelayCommand]
+    private void ToggleOverlay() => OverlayHost.Toggle?.Invoke(this);
 }

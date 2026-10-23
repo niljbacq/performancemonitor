@@ -18,6 +18,9 @@ public partial class GpuViewModel : ViewModelBase
     private string? _utilization;
     public string? Utilization { get => _utilization; set => SetProperty(ref _utilization, value); }
 
+    private bool _hasUtilization;
+    public bool HasUtilization { get => _hasUtilization; set => SetProperty(ref _hasUtilization, value); }
+
     private double _utilizationValue = 0;
     public double UtilizationValue { get => _utilizationValue; set => SetProperty(ref _utilizationValue, value); }
 
@@ -209,6 +212,7 @@ public partial class GpuViewModel : ViewModelBase
 
     private void ClearFlatSample()
     {
+        HasUtilization = false;
         Utilization = null;
         UtilizationValue = 0;
         Temperature = null;
@@ -218,6 +222,7 @@ public partial class GpuViewModel : ViewModelBase
 
     private void ApplySampleToFlat(GpuInfo d)
     {
+        HasUtilization = d.Utilization is double;
         UtilizationValue = d.Utilization ?? 0;
         Utilization = d.Utilization is double u ? $"{u:0}%" : d.UtilizationText;
         Temperature = d.TemperatureC is double t ? $"{t} °C" : d.TemperatureText;
@@ -227,6 +232,7 @@ public partial class GpuViewModel : ViewModelBase
 
     private void ApplySampleToFlat(GpuSample d)
     {
+        HasUtilization = d.Utilization is double;
         UtilizationValue = d.Utilization ?? 0;
         Utilization = d.Utilization is double u ? $"{u:0}%" : d.UtilizationText;
         Temperature = d.TemperatureC is double t ? $"{t} °C" : d.TemperatureText;

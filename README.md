@@ -48,6 +48,10 @@ Download the latest files from [Releases](https://github.com/niljbacq/performanc
   ./PerformanceMonitor-Linux
   ```
 
+No extra GPU tool is required: Radeon utilization is read directly through the kernel DRM interface, without `sudo`.
+
+Use the **Overlay** card on Home for a compact always-on-top panel. Linux X11 supports this; Wayland compositors may ignore the always-on-top hint. On Android, the card requests “Display over other apps” and opens a floating overlay that keeps updating in the background. The FPS row is the desktop overlay's render rate, not a game's FPS; game FPS needs a graphics-API hook.
+
 ### Android
 
 1. Download `PerformanceMonitor-Android.apk`.

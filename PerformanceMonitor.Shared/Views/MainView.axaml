@@ -15,16 +15,34 @@
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="10,0"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#AAAAAA"/>
             <Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
 
         <Style Selector="Button.nav[Tag=true]">
-            <Setter Property="Background" Value="#333337"/>
+            <Setter Property="Background" Value="#3A3A3D"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <Style Selector="Button.nav:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#2D2D30"/>
+        </Style>
+
+        <Style Selector="Button.nav:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3A3A3D"/>
+        </Style>
+
+        <Style Selector="Button.nav[Tag=true]:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#444448"/>
+        </Style>
+
+        <Style Selector="Button.nav[Tag=true]:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3A3A3D"/>
         </Style>
 
         <Style Selector="Button.homeCard">
@@ -36,28 +54,23 @@
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="BorderBrush" Value="#333333"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
         <Style Selector="Button.homeCard:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#2D2D30"/>
+        </Style>
+        <Style Selector="Button.homeCard:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#333337"/>
         </Style>
 
         <Style Selector="Grid.mobileLayout">
             <Setter Property="IsVisible" Value="False"/>
         </Style>
-
-        <ContainerQuery Name="main" Query="max-width:699">
-            <Style Selector="Grid.desktopLayout">
-                <Setter Property="IsVisible" Value="False"/>
-            </Style>
-            <Style Selector="Grid.mobileLayout">
-                <Setter Property="IsVisible" Value="True"/>
-            </Style>
-        </ContainerQuery>
     </UserControl.Styles>
 
-    <Panel Container.Name="main" Container.Sizing="Width">
+    <Panel>
 
-    <Grid Classes="desktopLayout" ColumnDefinitions="220, *">
+    <Grid x:Name="DesktopLayout" Classes="desktopLayout" ColumnDefinitions="220, *">
 
         <Border Grid.Column="0" Background="#252526" BorderBrush="#333333" BorderThickness="0,0,1,0">
             <StackPanel Margin="10" Spacing="6">
@@ -76,8 +89,11 @@
                 <DataTemplate DataType="{x:Type vm:HomeViewModel}">
                     <Grid RowDefinitions="Auto, *" Margin="24">
                         <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                            <TextBlock Text="Performance Monitor" FontSize="28" FontWeight="SemiBold" Foreground="White"/>
-                            <TextBlock Text="Choose a category to view live stats" FontSize="13" Foreground="#888888" Margin="0,2,0,0"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Image Source="/Assets/Duck.png" Width="32" Height="32" VerticalAlignment="Center"/>
+                                <TextBlock Text="Performance Monitor" FontSize="28" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Choose a category to view live stats" FontSize="13" Foreground="#888888" Margin="42,2,0,0"/>
                         </StackPanel>
 
                         <UniformGrid Grid.Row="1" Columns="2" Rows="3" VerticalAlignment="Top">
@@ -118,6 +134,14 @@
                                 <StackPanel>
                                     <TextBlock Text="GPU" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
                                     <TextBlock Text="3D utilization, temperature and VRAM usage" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Classes="homeCard" Margin="10,10,0,0"
+                                    Command="{Binding $parent[views:MainView].DataContext.ToggleOverlayCommand}">
+                                <StackPanel>
+                                    <TextBlock Text="Overlay" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock Text="Floating always-on-top stats" FontSize="12" Foreground="#888888" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Button>
                         </UniformGrid>
@@ -305,7 +329,8 @@
                     <Grid RowDefinitions="Auto, *" Margin="20">
                         <Grid Grid.Row="0" RowDefinitions="Auto, Auto" ColumnDefinitions="Auto, *" Margin="0,0,0,15">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Disk" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,15,0"/>
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ModelName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ModelName}" FontSize="18" Foreground="#E1E1E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding ModelName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                             <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,4,0,0"
                                         IsVisible="{Binding IoPressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <TextBlock Text="I/O pressure (PSI): " FontSize="12" Foreground="#888888"/>
@@ -321,7 +346,7 @@
                                     <TextBlock Text="SSD" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
 
                                     <TextBlock Text="{Binding Ssd.ModelName}" FontSize="14" Foreground="#E1E1E1" TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding Ssd.HasDisk}"/>
+                                               IsVisible="{Binding Ssd.HasModelName}"/>
                                     <TextBlock Text="{Binding Ssd.EmptyLabel}" FontSize="14" Foreground="#888888"
                                                IsVisible="{Binding !Ssd.HasDisk}"/>
 
@@ -383,7 +408,7 @@
                                     <TextBlock Text="HDD" FontSize="20" FontWeight="SemiBold" Foreground="White"/>
 
                                     <TextBlock Text="{Binding Hdd.ModelName}" FontSize="14" Foreground="#E1E1E1" TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding Hdd.HasDisk}"/>
+                                               IsVisible="{Binding Hdd.HasModelName}"/>
                                     <TextBlock Text="{Binding Hdd.EmptyLabel}" FontSize="14" Foreground="#888888"
                                                IsVisible="{Binding !Hdd.HasDisk}"/>
 
@@ -443,7 +468,8 @@
                                     IsVisible="{Binding Other.HasDisk}">
                                 <StackPanel Spacing="4">
                                     <TextBlock Text="Storage" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
-                                    <TextBlock Text="{Binding Other.ModelName}" FontSize="14" Foreground="#E1E1E1" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Other.ModelName}" FontSize="14" Foreground="#E1E1E1" TextTrimming="CharacterEllipsis"
+                                               IsVisible="{Binding Other.HasModelName}"/>
                                     <DockPanel><TextBlock Text="Disk" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Other.DiskName}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                     <DockPanel><TextBlock Text="Capacity" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Other.Capacity}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
                                     <DockPanel IsVisible="{Binding Other.UsedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Text="Used" FontSize="12" Foreground="#888888"/><TextBlock Text="{Binding Other.UsedText}" FontSize="12" Foreground="White" HorizontalAlignment="Right"/></DockPanel>
@@ -647,7 +673,7 @@
 
     </Grid>
 
-    <Grid Classes="mobileLayout" RowDefinitions="*,Auto" Background="#1E1E1E">
+    <Grid x:Name="MobileLayout" Classes="mobileLayout" RowDefinitions="*,Auto" Background="#1E1E1E">
 
         <Grid.Styles>
             <Style Selector="TextBlock.mTitle">
@@ -701,6 +727,15 @@
                 <Setter Property="CornerRadius" Value="8"/>
                 <Setter Property="Padding" Value="16,14"/>
                 <Setter Property="MinHeight" Value="64"/>
+                <Setter Property="BorderBrush" Value="#333333"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Cursor" Value="Hand"/>
+            </Style>
+            <Style Selector="Button.mHomeCard:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="#2D2D30"/>
+            </Style>
+            <Style Selector="Button.mHomeCard:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="#333337"/>
             </Style>
             <Style Selector="Button.mNav">
                 <Setter Property="Background" Value="Transparent"/>
@@ -708,6 +743,25 @@
                 <Setter Property="HorizontalContentAlignment" Value="Center"/>
                 <Setter Property="Padding" Value="0,6"/>
                 <Setter Property="MinHeight" Value="56"/>
+                <Setter Property="Cursor" Value="Hand"/>
+            </Style>
+            <Style Selector="Button.mNav[Tag=true]">
+                <Setter Property="Background" Value="#3A3A3D"/>
+            </Style>
+            <Style Selector="Button.mNav[Tag=true] TextBlock.mNavText">
+                <Setter Property="Foreground" Value="White"/>
+            </Style>
+            <Style Selector="Button.mNav:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="#2D2D30"/>
+            </Style>
+            <Style Selector="Button.mNav:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="#3A3A3D"/>
+            </Style>
+            <Style Selector="Button.mNav[Tag=true]:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="#444448"/>
+            </Style>
+            <Style Selector="Button.mNav[Tag=true]:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="#3A3A3D"/>
             </Style>
             <Style Selector="TextBlock.mNavIcon">
                 <Setter Property="FontSize" Value="20"/>
@@ -726,8 +780,11 @@
                 <DataTemplate DataType="{x:Type vm:HomeViewModel}" x:DataType="vm:HomeViewModel">
                     <ScrollViewer>
                         <StackPanel Margin="16" Spacing="12">
-                            <TextBlock Classes="mTitle" Text="Performance Monitor"/>
-                            <TextBlock Classes="mSub" Text="Tap a card for live details."/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Image Source="/Assets/Duck.png" Width="28" Height="28" VerticalAlignment="Center"/>
+                                <TextBlock Classes="mTitle" Text="Performance Monitor" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Classes="mSub" Text="Tap a card for live details." Margin="36,0,0,0"/>
                             <Button Classes="mHomeCard" Command="{Binding $parent[views:MainView].DataContext.SelectCpuCommand}">
                                 <StackPanel>
                                     <TextBlock Classes="mCardTitle" Text="CPU"/>
@@ -756,6 +813,12 @@
                                 <StackPanel>
                                     <TextBlock Classes="mCardTitle" Text="GPU"/>
                                     <TextBlock Classes="mSub" Text="Graphics device details"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="mHomeCard" Command="{Binding $parent[views:MainView].DataContext.ToggleOverlayCommand}">
+                                <StackPanel>
+                                    <TextBlock Classes="mCardTitle" Text="Overlay"/>
+                                    <TextBlock Classes="mSub" Text="Floating stats over other apps"/>
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -870,7 +933,7 @@
                             <Border Classes="mCard">
                                 <StackPanel Spacing="8">
                                     <TextBlock Classes="mCardTitle" Text="Internal Storage"/>
-                                    <TextBlock Classes="mSub" Text="{Binding Other.ModelName}" IsVisible="{Binding Other.HasDisk}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Other.ModelName}" IsVisible="{Binding Other.HasModelName}"/>
                                     <TextBlock Classes="mSub" Text="{Binding Other.EmptyLabel}" IsVisible="{Binding !Other.HasDisk}"/>
 
                                     <StackPanel Spacing="8" IsVisible="{Binding Other.HasDisk}">
@@ -910,7 +973,7 @@
                             <Border Classes="mCard" IsVisible="{Binding Hdd.HasDisk}">
                                 <StackPanel Spacing="8">
                                     <TextBlock Classes="mCardTitle" Text="HDD"/>
-                                    <TextBlock Classes="mSub" Text="{Binding Hdd.ModelName}"/>
+                                    <TextBlock Classes="mSub" Text="{Binding Hdd.ModelName}" IsVisible="{Binding Hdd.HasModelName}"/>
 
                                     <StackPanel Spacing="8">
                                         <StackPanel Spacing="4"
@@ -1054,24 +1117,24 @@
             </ContentControl.DataTemplates>
         </ContentControl>
 
-        <Border Grid.Row="1" Background="#252526">
+        <Border x:Name="MobileNavBorder" Grid.Row="1" Background="#252526">
             <UniformGrid Rows="1">
-                <Button Classes="mNav" Command="{Binding SelectHomeCommand}">
+                <Button Classes="mNav" Command="{Binding SelectHomeCommand}" Tag="{Binding IsHomeActive}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="🏠"/><TextBlock Classes="mNavText" Text="Home"/></StackPanel>
                 </Button>
-                <Button Classes="mNav" Command="{Binding SelectCpuCommand}">
+                <Button Classes="mNav" Command="{Binding SelectCpuCommand}" Tag="{Binding IsCpuActive}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="⚙"/><TextBlock Classes="mNavText" Text="CPU"/></StackPanel>
                 </Button>
-                <Button Classes="mNav" Command="{Binding SelectMemoryCommand}">
+                <Button Classes="mNav" Command="{Binding SelectMemoryCommand}" Tag="{Binding IsMemoryActive}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="🧩"/><TextBlock Classes="mNavText" Text="Memory"/></StackPanel>
                 </Button>
-                <Button Classes="mNav" Command="{Binding SelectDiskCommand}">
+                <Button Classes="mNav" Command="{Binding SelectDiskCommand}" Tag="{Binding IsDiskActive}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="💾"/><TextBlock Classes="mNavText" Text="Storage"/></StackPanel>
                 </Button>
-                <Button Classes="mNav" Command="{Binding SelectWifiCommand}">
+                <Button Classes="mNav" Command="{Binding SelectWifiCommand}" Tag="{Binding IsWifiActive}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="📶"/><TextBlock Classes="mNavText" Text="Wi-Fi"/></StackPanel>
                 </Button>
-                <Button Classes="mNav" Command="{Binding SelectGpuCommand}">
+                <Button Classes="mNav" Command="{Binding SelectGpuCommand}" Tag="{Binding IsGpuActive}">
                     <StackPanel><TextBlock Classes="mNavIcon" Text="🎮"/><TextBlock Classes="mNavText" Text="GPU"/></StackPanel>
                 </Button>
             </UniformGrid>

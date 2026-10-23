@@ -20,7 +20,7 @@ public class AndroidApp : AvaloniaAndroidApplication<App>
         ProviderFactory.WifiFactory = () => new AndroidWifiProvider();
         ProviderFactory.LogDirectoryFactory = () =>
         {
-            try { return Android.App.Application.Context.GetExternalFilesDir(null)?.AbsolutePath; }
+            try { return Android.App.Application.Context?.GetExternalFilesDir(null)?.AbsolutePath; }
             catch { return null; }
         };
     }

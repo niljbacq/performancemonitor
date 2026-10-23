@@ -2,6 +2,8 @@
 
 using System;
 
+using TaskManager.Views;
+
 
 namespace TaskManager;
 
@@ -9,6 +11,8 @@ namespace TaskManager;
 internal class Program
 
 {
+
+    private static OverlayWindow? _overlay;
 
     // Initialization code. Don't use any Avalonia, third-party APIs or any
 
@@ -25,7 +29,41 @@ internal class Program
 
     public static AppBuilder BuildAvaloniaApp()
 
-        => AppBuilder.Configure<App>()
+    {
+
+        OverlayHost.Toggle = dataContext =>
+
+        {
+
+            if (_overlay is { } open)
+
+            {
+
+                _overlay = null;
+
+                open.Close();
+
+                return;
+
+            }
+
+            var overlay = new OverlayWindow { DataContext = dataContext };
+
+            overlay.Closed += (_, _) =>
+
+            {
+
+                if (ReferenceEquals(_overlay, overlay)) _overlay = null;
+
+            };
+
+            _overlay = overlay;
+
+            overlay.Show();
+
+        };
+
+        return AppBuilder.Configure<App>()
 
             .UsePlatformDetect()
 
@@ -33,5 +71,6 @@ internal class Program
 
             .LogToTrace();
 
-}
+    }
 
+}

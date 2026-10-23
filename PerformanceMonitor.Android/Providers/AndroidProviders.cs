@@ -410,7 +410,7 @@ public sealed class AndroidDiskProvider : IDiskProvider
         var s = new DiskSpecs
         {
             DiskName = "Internal storage",
-            ModelName = "System storage (I/O needs root)",
+            ModelName = null, // Android has no honest model name to show.
             Type = null
             // SystemDisk / PageFile left null; Android has no equivalent.
         };
