@@ -154,6 +154,7 @@ jobs:
           Priority: optional
           Architecture: amd64
           Maintainer: Performance Monitor
+          Recommends: radeontop
           Description: Cross-platform hardware performance monitor.
           EOF
           cat > release/deb/usr/share/applications/performance-monitor.desktop <<'EOF'
