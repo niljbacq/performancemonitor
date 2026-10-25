@@ -32,13 +32,28 @@ public partial class CpuViewModel : ViewModelBase
 
     // Null = not available on this platform, so the row hides.
     private string? _processes;
-    public string? Processes { get => _processes; set => SetProperty(ref _processes, value); }
+    public string? Processes 
+    { 
+        get => _processes; 
+        set { if (SetProperty(ref _processes, value)) OnPropertyChanged(nameof(HasProcesses)); }
+    }
+    public bool HasProcesses => !string.IsNullOrEmpty(_processes);
 
     private string? _threads;
-    public string? Threads { get => _threads; set => SetProperty(ref _threads, value); }
+    public string? Threads 
+    { 
+        get => _threads; 
+        set { if (SetProperty(ref _threads, value)) OnPropertyChanged(nameof(HasThreads)); }
+    }
+    public bool HasThreads => !string.IsNullOrEmpty(_threads);
 
     private string? _handles;
-    public string? Handles { get => _handles; set => SetProperty(ref _handles, value); }
+    public string? Handles 
+    { 
+        get => _handles; 
+        set { if (SetProperty(ref _handles, value)) OnPropertyChanged(nameof(HasHandles)); }
+    }
+    public bool HasHandles => !string.IsNullOrEmpty(_handles);
 
     private string _uptime = "0:00:00:00";
     public string Uptime { get => _uptime; set => SetProperty(ref _uptime, value); }

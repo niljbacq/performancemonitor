@@ -26,8 +26,14 @@ internal sealed class AndroidOverlay : IDisposable
     private readonly MetricRow _memory;
     private readonly MetricRow _gpu;
     private readonly MetricRow _gpuTemp;
+    private readonly MetricRow _batteryTemp;
     private readonly MetricRow _fps;
     private bool _disposed;
+
+    // FPS counter using Choreographer
+    private int _frameCount;
+    private long _lastFrameTime;
+    private readonly object _fpsLock = new object();
 
     public event Action? CloseRequested;
 
@@ -43,7 +49,7 @@ internal sealed class AndroidOverlay : IDisposable
         _root.SetPadding(Dp(12), Dp(10), Dp(12), Dp(10));
 
         var background = new GradientDrawable();
-        background.SetColor(Color.ParseColor("#252526"));
+        background.SetColor(Color.ParseColor("#CC252526"));
         background.SetCornerRadius(Dp(8));
         background.SetStroke(Dp(1), Color.ParseColor("#333333"));
         _root.Background = background;
@@ -53,6 +59,7 @@ internal sealed class AndroidOverlay : IDisposable
         _memory = AddBarRow("Memory");
         _gpu = AddBarRow("GPU");
         _gpuTemp = AddTextRow("GPU temp");
+        _batteryTemp = AddTextRow("Battery");
         _fps = AddTextRow("FPS");
 
         _layoutParams = new WindowManagerLayoutParams(
@@ -71,6 +78,38 @@ internal sealed class AndroidOverlay : IDisposable
 
         _windowManager.AddView(_root, _layoutParams);
         _sampling.SampleCollected += OnSample;
+
+        // Start FPS counter via Choreographer
+        Choreographer.Instance?.PostFrameCallback(new FpsCallback(this));
+    }
+
+    private sealed class FpsCallback : Java.Lang.Object, Choreographer.IFrameCallback
+    {
+        private readonly AndroidOverlay _owner;
+
+        public FpsCallback(AndroidOverlay owner) => _owner = owner;
+
+        public void DoFrame(long frameTimeNanos)
+        {
+            lock (_owner._fpsLock)
+            {
+                _owner._frameCount++;
+                long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                if (_owner._lastFrameTime == 0)
+                {
+                    _owner._lastFrameTime = now;
+                }
+                else if (now - _owner._lastFrameTime >= 1000)
+                {
+                    float fps = _owner._frameCount * 1000f / (now - _owner._lastFrameTime);
+                    _owner._handler.Post(() => SetText(_owner._fps, $"{fps:F1}"));
+                    _owner._frameCount = 0;
+                    _owner._lastFrameTime = now;
+                }
+            }
+
+            Choreographer.Instance?.PostFrameCallback(this);
+        }
     }
 
     private View BuildHeader()
@@ -158,11 +197,20 @@ internal sealed class AndroidOverlay : IDisposable
         SetBar(_gpu, sample.GpuUtilization);
         SetText(_gpuTemp, sample.GpuTemperatureC is double t ? $"{t:0} °C" : null);
 
-        // shortcut: display mode rate, not the overlay's rendered frame rate; use Choreographer
-        // frame counts if presented frames must be measured exactly.
-        var refresh = _context.GetSystemService(Context.DisplayService)
-            ?.JavaCast<DisplayManager>()?.GetDisplay(Display.DefaultDisplay)?.RefreshRate;
-        SetText(_fps, refresh is float hz && hz > 0 ? $"{hz:0}" : null);
+        // Battery temperature (Android only)
+        try
+        {
+            var filter = new IntentFilter(Intent.ActionBatteryChanged);
+            var battery = _context.RegisterReceiver(null, filter);
+            int tenths = battery?.GetIntExtra(Android.OS.BatteryManager.ExtraTemperature, int.MinValue) ?? int.MinValue;
+            if (tenths != int.MinValue && tenths > 0)
+                SetText(_batteryTemp, $"{tenths / 10.0:F1} °C");
+            else
+                SetText(_batteryTemp, null);
+        }
+        catch { SetText(_batteryTemp, null); }
+
+        // FPS measured via Choreographer callback
     }
 
     private static void SetBar(MetricRow row, double? value)

@@ -12,10 +12,10 @@
         ShowInTaskbar="False"
         ShowActivated="False"
         WindowStartupLocation="Manual"
-        Background="#1E1E1E">
+        Background="Transparent">
 
     <!-- shortcut: opaque panel; add compositor-aware transparency later if wanted. -->
-    <Border Background="#252526" BorderBrush="#333333" BorderThickness="1" Padding="12"
+    <Border Background="#CC252526" BorderBrush="#333333" BorderThickness="1" Padding="12"
             PointerPressed="OnDrag">
         <StackPanel Spacing="8">
             <DockPanel>
