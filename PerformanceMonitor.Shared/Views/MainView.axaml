@@ -737,6 +737,17 @@
             <Style Selector="Button.mHomeCard:pressed /template/ ContentPresenter">
                 <Setter Property="Background" Value="#333337"/>
             </Style>
+            <Style Selector="Button.mAction">
+                <Setter Property="Background" Value="#3A3A3D"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="Padding" Value="12,8"/>
+                <Setter Property="HorizontalAlignment" Value="Left"/>
+                <Setter Property="Cursor" Value="Hand"/>
+            </Style>
+            <Style Selector="Button.mAction:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="#444448"/>
+            </Style>
             <Style Selector="Button.mNav">
                 <Setter Property="Background" Value="Transparent"/>
                 <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -877,16 +888,6 @@
                                     <DockPanel Classes="mRow" IsVisible="{Binding AppUsageText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="This app CPU"/><TextBlock Classes="mValue" Text="{Binding AppUsageText}"/></DockPanel>
                                 </StackPanel>
                             </Border>
-                            <Border Classes="mCard">
-                                <StackPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Processes, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Processes"/><TextBlock Classes="mValue" Text="{Binding Processes}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Threads, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Threads"/><TextBlock Classes="mValue" Text="{Binding Threads}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding Handles, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Handles"/><TextBlock Classes="mValue" Text="{Binding Handles}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding L1Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="L1 cache"/><TextBlock Classes="mValue" Text="{Binding L1Cache}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding L2Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="L2 cache"/><TextBlock Classes="mValue" Text="{Binding L2Cache}"/></DockPanel>
-                                    <DockPanel Classes="mRow" IsVisible="{Binding L3Cache, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="L3 cache"/><TextBlock Classes="mValue" Text="{Binding L3Cache}"/></DockPanel>
-                                </StackPanel>
-                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                 </DataTemplate>
@@ -965,9 +966,47 @@
                                         <DockPanel Classes="mRow" IsVisible="{Binding Other.PageFile, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Page file"/><TextBlock Classes="mValue" Text="{Binding Other.PageFile}"/></DockPanel>
                                         <DockPanel Classes="mRow" IsVisible="{Binding Other.UsedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Used"/><TextBlock Classes="mValue" Text="{Binding Other.UsedText}"/></DockPanel>
                                         <DockPanel Classes="mRow" IsVisible="{Binding Other.FreeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Free"/><TextBlock Classes="mValue" Text="{Binding Other.FreeText}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding FileSystemText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="File system"/><TextBlock Classes="mValue" Text="{Binding FileSystemText}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding BlockSizeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Block size"/><TextBlock Classes="mValue" Text="{Binding BlockSizeText}"/></DockPanel>
+                                        <DockPanel Classes="mRow" IsVisible="{Binding FreeSpaceTrendText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Free space change"/><TextBlock Classes="mValue" Text="{Binding FreeSpaceTrendText}"/></DockPanel>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
+
+                            <Border Classes="mCard" IsVisible="{Binding HasVolumes}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="mCardTitle" Text="Other volumes"/>
+                                    <ItemsControl ItemsSource="{Binding Volumes}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:DiskVolumeViewModel">
+                                                <StackPanel Spacing="4" Margin="0,0,0,8">
+                                                    <DockPanel><TextBlock Classes="mLabel" Text="{Binding Name}"/><TextBlock Classes="mValue" Text="{Binding UsageText}"/></DockPanel>
+                                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding UsedPercent}" Height="6"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="mCard">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="mCardTitle" Text="Space usage"/>
+                                    <TextBlock Classes="mSub" IsVisible="{Binding UsageHintVisible}" Text="Grant Usage access to see what is using space."/>
+                                    <Button Classes="mAction" IsVisible="{Binding UsageHintVisible}" Content="Open settings" Command="{Binding OpenUsageAccessCommand}"/>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding AppsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Apps"/><TextBlock Classes="mValue" Text="{Binding AppsText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding AppDataText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="App data"/><TextBlock Classes="mValue" Text="{Binding AppDataText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding AppCacheText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="App cache"/><TextBlock Classes="mValue" Text="{Binding AppCacheText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding OtherText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Other"/><TextBlock Classes="mValue" Text="{Binding OtherText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding PhotosText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Photos"/><TextBlock Classes="mValue" Text="{Binding PhotosText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding VideosText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Videos"/><TextBlock Classes="mValue" Text="{Binding VideosText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding AudioText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Audio"/><TextBlock Classes="mValue" Text="{Binding AudioText}"/></DockPanel>
+                                    <TextBlock Classes="mSub" IsVisible="{Binding MediaHintVisible}" Text="Allow media access to split photos, videos, and audio out of Other."/>
+                                    <Button Classes="mAction" IsVisible="{Binding MediaHintVisible}" Content="Allow media access" Command="{Binding RequestMediaAccessCommand}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Classes="mSub" Text="Android does not expose device-wide disk I/O to apps."/>
 
                             <!-- HDD card: only shown if a real HDD is present (never on Android) -->
                             <Border Classes="mCard" IsVisible="{Binding Hdd.HasDisk}">
@@ -1110,6 +1149,25 @@
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
+
+                            <Border Classes="mCard" IsVisible="{Binding HasDisplay}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="mCardTitle" Text="Display"/>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding DisplayResolution, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Resolution"/><TextBlock Classes="mValue" Text="{Binding DisplayResolution}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding RefreshRateText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Refresh rate"/><TextBlock Classes="mValue" Text="{Binding RefreshRateText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding HdrText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="HDR"/><TextBlock Classes="mValue" Text="{Binding HdrText}"/></DockPanel>
+                                    <DockPanel Classes="mRow" IsVisible="{Binding WideColorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Wide colour"/><TextBlock Classes="mValue" Text="{Binding WideColorText}"/></DockPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="mCard" IsVisible="{Binding HasThermal}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="mCardTitle" Text="Thermal"/>
+                                    <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="Status"/><TextBlock Classes="mValue" Text="{Binding ThermalStatus}"/></DockPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Classes="mSub" Text="Android often does not expose GPU load or temperature."/>
                         </StackPanel>
                     </ScrollViewer>
                 </DataTemplate>

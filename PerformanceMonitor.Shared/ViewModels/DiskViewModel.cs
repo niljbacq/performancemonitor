@@ -1,7 +1,10 @@
 ﻿using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TaskManager.Providers;
@@ -51,6 +54,44 @@ public partial class DiskViewModel : ViewModelBase
     [ObservableProperty] private string? _appsAndDataText;
     [ObservableProperty] private string? _systemReservedText;
     [ObservableProperty] private string? _ioPressureText;
+    [ObservableProperty] private string? _fileSystemText;
+    [ObservableProperty] private string? _blockSizeText;
+    [ObservableProperty] private string? _freeSpaceTrendText;
+    [ObservableProperty] private string? _appsText;
+    [ObservableProperty] private string? _appDataText;
+    [ObservableProperty] private string? _appCacheText;
+    [ObservableProperty] private string? _otherText;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MediaHintVisible))]
+    private string? _photosText;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MediaHintVisible))]
+    private string? _videosText;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MediaHintVisible))]
+    private string? _audioText;
+
+    private bool _usageAccessGranted;
+    public bool UsageAccessGranted
+    {
+        get => _usageAccessGranted;
+        set
+        {
+            if (SetProperty(ref _usageAccessGranted, value))
+            {
+                OnPropertyChanged(nameof(UsageHintVisible));
+                OnPropertyChanged(nameof(MediaHintVisible));
+            }
+        }
+    }
+
+    public bool UsageHintVisible => !_usageAccessGranted;
+
+    public bool MediaHintVisible => UsageAccessGranted &&
+        (PhotosText == null || VideosText == null || AudioText == null);
+
+    public ObservableCollection<DiskVolumeViewModel> Volumes { get; } = new();
+    public bool HasVolumes => Volumes.Count > 0;
 
     public DiskSubViewModel Ssd { get; } = new DiskSubViewModel("SSD", "No SSD detected");
     public DiskSubViewModel Hdd { get; } = new DiskSubViewModel("HDD", "No HDD detected");
@@ -58,6 +99,8 @@ public partial class DiskViewModel : ViewModelBase
 
     private readonly IDiskProvider _provider;
     private readonly IDiskListProvider? _listProvider;
+    private readonly IStorageExtrasProvider? _extrasProvider;
+    private StorageExtras? _lastExtras;
     private CancellationTokenSource? _cts;
     private bool _specsLoaded;
 
@@ -67,6 +110,7 @@ public partial class DiskViewModel : ViewModelBase
     {
         _provider = provider;
         _listProvider = provider as IDiskListProvider;
+        _extrasProvider = provider as IStorageExtrasProvider;
     }
 
     public void Start()
@@ -183,9 +227,45 @@ public partial class DiskViewModel : ViewModelBase
         }
     }
 
+    private void ApplyExtras(StorageExtras extras)
+    {
+        FileSystemText = extras.FileSystem;
+        BlockSizeText = extras.BlockSize;
+
+        var breakdown = extras.Breakdown;
+        UsageAccessGranted = extras.UsageAccessGranted;
+        AppsText = breakdown?.Apps;
+        AppDataText = breakdown?.AppData;
+        AppCacheText = breakdown?.AppCache;
+        OtherText = breakdown?.Other;
+        PhotosText = breakdown?.Photos;
+        VideosText = breakdown?.Videos;
+        AudioText = breakdown?.Audio;
+
+        if (ReferenceEquals(_lastExtras, extras)) return;
+        Volumes.Clear();
+        foreach (var v in extras.Volumes)
+        {
+            Volumes.Add(new DiskVolumeViewModel
+            {
+                Name = v.Name,
+                UsageText = v.UsageText,
+                UsedPercent = v.UsedPercent
+            });
+        }
+        OnPropertyChanged(nameof(HasVolumes));
+        _lastExtras = extras;
+    }
+
+    [RelayCommand]
+    private void OpenUsageAccess() => _extrasProvider?.OpenUsageAccessSettings();
+
+    [RelayCommand]
+    private void RequestMediaAccess() => _extrasProvider?.RequestMediaAccess();
+
     private async Task StartMonitoringAsync(CancellationToken token)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
 
         try
         {
@@ -199,6 +279,7 @@ public partial class DiskViewModel : ViewModelBase
                         var ssd = PickPrimary(samples, IsSsd);
                         var hdd = PickPrimary(samples, IsHdd);
                         var other = PickPrimary(samples, d => !IsSsd(d) && !IsHdd(d));
+                        var extras = _extrasProvider?.GetExtras();
 
                         Dispatcher.UIThread.Post(() =>
                         {
@@ -209,6 +290,8 @@ public partial class DiskViewModel : ViewModelBase
                             var primary = ssd ?? hdd ?? other;
                             if (primary != null) ApplySampleToFlat(primary);
                             else ClearFlatSample();
+
+                            if (extras != null) ApplyExtras(extras);
                         });
                     }
                     else
@@ -277,6 +360,37 @@ public partial class DiskViewModel : ViewModelBase
         ActiveTimeValue = d.ActivePercent ?? 0;
         ActiveTime = d.ActivePercent is double a ? $"{a}%" : null;
         AverageResponseTime = d.ResponseMs is double ms ? $"{ms:F1} ms" : null;
+
+        if (d.FreeBytes is double free) TrackFreeSpace(free);
+    }
+
+    private readonly Queue<(DateTime At, double Bytes)> _freeSamples = new();
+
+    private void TrackFreeSpace(double free)
+    {
+        var now = DateTime.UtcNow;
+        _freeSamples.Enqueue((now, free));
+        while (_freeSamples.Count > 0 && now - _freeSamples.Peek().At > TimeSpan.FromMinutes(5))
+            _freeSamples.Dequeue();
+
+        if (_freeSamples.Count < 2) { FreeSpaceTrendText = null; return; }
+
+        var first = _freeSamples.Peek();
+        var last = _freeSamples.Last();
+        var span = last.At - first.At;
+        if (span.TotalSeconds < 60) { FreeSpaceTrendText = null; return; }
+
+        double delta = last.Bytes - first.Bytes;
+        FreeSpaceTrendText = Math.Abs(delta) < 1024 * 1024
+            ? $"No change in {span.TotalMinutes:F0} min"
+            : $"{(delta > 0 ? "+" : "-")}{FormatBytes(Math.Abs(delta))} in {span.TotalMinutes:F0} min";
+    }
+
+    internal static string FormatBytes(double bytes)
+    {
+        if (bytes >= 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
+        if (bytes >= 1024 * 1024) return $"{bytes / (1024.0 * 1024):F0} MB";
+        return $"{bytes / 1024.0:F0} KB";
     }
 
     private static bool IsSsd(DiskInfo d)
@@ -417,6 +531,9 @@ public partial class DiskSubViewModel : ViewModelBase
         ActiveTimeValue = d.ActivePercent ?? 0;
         ActiveTime = d.ActivePercent is double a ? $"{a}%" : null;
         AverageResponseTime = d.ResponseMs is double ms ? $"{ms:F1} ms" : null;
+
+        if (d.UsedText != null) UsedText = d.UsedText;
+        if (d.FreeText != null) FreeText = d.FreeText;
     }
 
     public void UpdateSample(DiskSample d)
@@ -463,4 +580,11 @@ public partial class DiskSubViewModel : ViewModelBase
         WriteSpeed = null;
         WriteSpeedBytes = null;
     }
+}
+
+public partial class DiskVolumeViewModel : ViewModelBase
+{
+    public string Name { get; init; } = "";
+    public string UsageText { get; init; } = "";
+    public double UsedPercent { get; init; }
 }

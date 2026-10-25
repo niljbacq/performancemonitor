@@ -26,6 +26,13 @@ public class MainActivity : AvaloniaMainActivity
         RequestPermissionsIfNeeded();
         StartMonitorService();
         OverlayHost.Toggle = _ => ToggleAndroidOverlay();
+        MediaAccessHost.Request = RequestMediaPermissions;
+    }
+
+    protected override void OnDestroy()
+    {
+        MediaAccessHost.Request = null;
+        base.OnDestroy();
     }
 
     protected override void OnPause()
@@ -87,6 +94,29 @@ public class MainActivity : AvaloniaMainActivity
 
         if (needed.Count > 0)
             RequestPermissions(needed.ToArray(), PermissionRequestCode);
+    }
+
+    private const int MediaPermissionRequestCode = 1002;
+
+    private void RequestMediaPermissions()
+    {
+        var needed = new List<string>();
+        if (OperatingSystem.IsAndroidVersionAtLeast(33))
+        {
+            if (CheckSelfPermission(Android.Manifest.Permission.ReadMediaImages) != Permission.Granted)
+                needed.Add(Android.Manifest.Permission.ReadMediaImages);
+            if (CheckSelfPermission(Android.Manifest.Permission.ReadMediaVideo) != Permission.Granted)
+                needed.Add(Android.Manifest.Permission.ReadMediaVideo);
+            if (CheckSelfPermission(Android.Manifest.Permission.ReadMediaAudio) != Permission.Granted)
+                needed.Add(Android.Manifest.Permission.ReadMediaAudio);
+        }
+        else if (CheckSelfPermission(Android.Manifest.Permission.ReadExternalStorage) != Permission.Granted)
+        {
+            needed.Add(Android.Manifest.Permission.ReadExternalStorage);
+        }
+
+        if (needed.Count > 0)
+            RequestPermissions(needed.ToArray(), MediaPermissionRequestCode);
     }
 
     // Starts the special-use foreground service so sampling (and CSV logging)

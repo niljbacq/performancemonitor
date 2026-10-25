@@ -110,6 +110,20 @@ public interface IGpuProvider
     GpuSample? Sample();
 }
 
+public sealed class GpuEnvironment
+{
+    public string? DisplayResolution { get; set; }
+    public string? RefreshRate { get; set; }
+    public string? Hdr { get; set; }
+    public string? WideColor { get; set; }
+    public string? ThermalStatus { get; set; }
+}
+
+public interface IGpuEnvironmentProvider
+{
+    GpuEnvironment GetEnvironment();
+}
+
 public interface IGpuListProvider
 {
     IReadOnlyList<GpuInfo> GetGpuList();
@@ -148,6 +162,41 @@ public interface IDiskListProvider
     IReadOnlyList<DiskInfo> SampleDiskList();
 }
 
+public sealed class StorageExtras
+{
+    public string? FileSystem { get; set; }
+    public string? BlockSize { get; set; }
+    // True only when Usage Access was actually granted, not merely when the breakdown loaded.
+    public bool UsageAccessGranted { get; set; }
+    public IReadOnlyList<StorageVolumeInfo> Volumes { get; set; } = Array.Empty<StorageVolumeInfo>();
+    public StorageBreakdown? Breakdown { get; set; }
+}
+
+public sealed class StorageVolumeInfo
+{
+    public string Name { get; set; } = "";
+    public string UsageText { get; set; } = "";
+    public double UsedPercent { get; set; }
+}
+
+public sealed class StorageBreakdown
+{
+    public string? Apps { get; set; }
+    public string? AppData { get; set; }
+    public string? AppCache { get; set; }
+    public string? Photos { get; set; }
+    public string? Videos { get; set; }
+    public string? Audio { get; set; }
+    public string? Other { get; set; }
+}
+
+public interface IStorageExtrasProvider
+{
+    StorageExtras GetExtras();
+    void OpenUsageAccessSettings();
+    void RequestMediaAccess();
+}
+
 public sealed class DiskInfo
 {
     public string? DeviceId { get; set; }
@@ -162,6 +211,7 @@ public sealed class DiskInfo
     public string? FreeText { get; set; }
     public string? AppsAndDataText { get; set; }
     public string? SystemReservedText { get; set; }
+    public double? FreeBytes { get; set; }
     public double? ReadBytesPerSec { get; set; }
     public double? WriteBytesPerSec { get; set; }
     public double? ActivePercent { get; set; }

@@ -27,13 +27,14 @@ internal sealed class AndroidOverlay : IDisposable
     private readonly MetricRow _gpu;
     private readonly MetricRow _gpuTemp;
     private readonly MetricRow _batteryTemp;
-    private readonly MetricRow _fps;
+    private readonly MetricRow _refresh;
     private bool _disposed;
 
-    // FPS counter using Choreographer
+    // Vsync counter: matches the panel refresh rate, not a game's rendered FPS.
     private int _frameCount;
     private long _lastFrameTime;
     private readonly object _fpsLock = new object();
+    private FpsCallback? _fpsCallback;
 
     public event Action? CloseRequested;
 
@@ -60,7 +61,7 @@ internal sealed class AndroidOverlay : IDisposable
         _gpu = AddBarRow("GPU");
         _gpuTemp = AddTextRow("GPU temp");
         _batteryTemp = AddTextRow("Battery");
-        _fps = AddTextRow("FPS");
+        _refresh = AddTextRow("Refresh rate");
 
         _layoutParams = new WindowManagerLayoutParams(
             Dp(220),
@@ -79,8 +80,9 @@ internal sealed class AndroidOverlay : IDisposable
         _windowManager.AddView(_root, _layoutParams);
         _sampling.SampleCollected += OnSample;
 
-        // Start FPS counter via Choreographer
-        Choreographer.Instance?.PostFrameCallback(new FpsCallback(this));
+        // Vsync counter, kept alive until Dispose removes it.
+        _fpsCallback = new FpsCallback(this);
+        Choreographer.Instance?.PostFrameCallback(_fpsCallback);
     }
 
     private sealed class FpsCallback : Java.Lang.Object, Choreographer.IFrameCallback
@@ -91,6 +93,8 @@ internal sealed class AndroidOverlay : IDisposable
 
         public void DoFrame(long frameTimeNanos)
         {
+            if (_owner._disposed) return;
+
             lock (_owner._fpsLock)
             {
                 _owner._frameCount++;
@@ -102,7 +106,10 @@ internal sealed class AndroidOverlay : IDisposable
                 else if (now - _owner._lastFrameTime >= 1000)
                 {
                     float fps = _owner._frameCount * 1000f / (now - _owner._lastFrameTime);
-                    _owner._handler.Post(() => SetText(_owner._fps, $"{fps:F1}"));
+                    _owner._handler.Post(() =>
+                    {
+                        if (!_owner._disposed) SetText(_owner._refresh, $"{fps:0} Hz");
+                    });
                     _owner._frameCount = 0;
                     _owner._lastFrameTime = now;
                 }
@@ -247,6 +254,8 @@ internal sealed class AndroidOverlay : IDisposable
         if (_disposed) return;
         _disposed = true;
         _sampling.SampleCollected -= OnSample;
+        try { Choreographer.Instance?.RemoveFrameCallback(_fpsCallback); } catch { }
+        _fpsCallback = null;
         try { _windowManager.RemoveView(_root); } catch { }
     }
 

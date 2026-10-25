@@ -6,8 +6,13 @@ using System.IO;
 using System.Linq;
 using Android.App;
 using Android.Content;
+using Android.Content.PM;
+using Android.Hardware.Display;
 using Android.Net;
 using Android.Net.Wifi;
+using Android.OS;
+using Android.Provider;
+using Android.Views;
 using TaskManager.Providers;
 
 namespace TaskManager.Droid;
@@ -79,7 +84,7 @@ public sealed class AndroidCpuProvider : ICpuProvider
 
     public CpuSpecs GetSpecs()
     {
-        int logical = Environment.ProcessorCount;
+        int logical = System.Environment.ProcessorCount;
 
         var mins = new List<long>();
         var maxs = new List<long>();
@@ -403,18 +408,40 @@ public sealed class AndroidMemoryProvider : IMemoryProvider
     }
 }
 
-public sealed class AndroidDiskProvider : IDiskProvider
+public sealed class AndroidDiskProvider : IDiskProvider, IDiskListProvider, IStorageExtrasProvider
 {
+    private StorageExtras? _extras;
+    private DateTime _extrasAtUtc;
+    private bool _lastUsageAccess;
+    private (bool Images, bool Videos, bool Audio) _lastMediaAccess;
+
     public DiskSpecs GetSpecs()
     {
-        var s = new DiskSpecs
+        var d = BuildDiskInfo();
+        return new DiskSpecs
         {
-            DiskName = "Internal storage",
-            ModelName = null, // Android has no honest model name to show.
-            Type = null
-            // SystemDisk / PageFile left null; Android has no equivalent.
+            DiskName = d.DiskName,
+            ModelName = d.ModelName,
+            Type = d.Type,
+            Capacity = d.Capacity,
+            Formatted = d.Formatted,
+            SystemDisk = d.SystemDisk,
+            PageFile = d.PageFile,
+            UsedText = d.UsedText,
+            FreeText = d.FreeText,
+            AppsAndDataText = d.AppsAndDataText,
+            SystemReservedText = d.SystemReservedText
         };
+    }
 
+    public IReadOnlyList<DiskInfo> GetDiskList() => new[] { BuildDiskInfo() };
+
+    public IReadOnlyList<DiskInfo> SampleDiskList() => new[] { BuildDiskInfo() };
+
+    // Total (StorageStatsManager, else StatFs), free (StatFs AvailableBytes) and
+    // StatFs total for the apps-and-data row, so GetSpecs and the breakdown agree.
+    private (double Total, double? Free, double? DataTotal, bool FromStorageStats)? ReadStorageNumbers()
+    {
         double? dataTotal = null, dataFree = null;
         try
         {
@@ -425,8 +452,19 @@ public sealed class AndroidDiskProvider : IDiskProvider
         }
         catch { }
 
-        double? total = null;
-        bool fromStorageStats = false;
+        // The partition total does not change while mounted, and GetTotalBytes is a
+        // slow binder call, so it is read once instead of every 2 s tick.
+        double? partTotal = PartTotal();
+        bool fromStorageStats = partTotal != null;
+        double total = partTotal ?? dataTotal ?? 0;
+        return total > 0 ? (total, dataFree, dataTotal, fromStorageStats) : null;
+    }
+
+    private double? _partitionTotal;
+
+    private double? PartTotal()
+    {
+        if (_partitionTotal is double cached) return cached;
         try
         {
             if (OperatingSystem.IsAndroidVersionAtLeast(26))
@@ -435,35 +473,271 @@ public sealed class AndroidDiskProvider : IDiskProvider
                           as Android.App.Usage.StorageStatsManager;
                 var uuid = Android.OS.Storage.StorageManager.UuidDefault;
                 if (ssm != null && uuid != null)
-                {
-                    total = ssm.GetTotalBytes(uuid);
-                    fromStorageStats = true;
-                }
+                    _partitionTotal = ssm.GetTotalBytes(uuid);
+            }
+        }
+        catch { }
+        return _partitionTotal;
+    }
+
+    private DiskInfo BuildDiskInfo()
+    {
+        var d = new DiskInfo { DiskName = "Internal storage" };
+        if (ReadStorageNumbers() is not { } numbers) return d;
+        var (total, free, dataTotal, fromStorageStats) = numbers;
+
+        d.Capacity = $"{Math.Round(total / (1024.0 * 1024 * 1024), 0)} GB";
+        d.Formatted = d.Capacity;
+        if (free is not double f) return d;
+
+        d.FreeBytes = f;
+        double used = total - f;
+        d.UsedText = $"{Fmt.Gb(used)} ({used / total * 100:F1}%)";
+        d.FreeText = $"{Fmt.Gb(f)} ({f / total * 100:F1}%)";
+
+        if (dataTotal is double dt)
+        {
+            d.AppsAndDataText = $"{Fmt.Gb(dt - f)} ({(dt - f) / total * 100:F1}%)";
+            if (fromStorageStats && total > dt)
+                d.SystemReservedText = $"{Fmt.Gb(total - dt)} ({(total - dt) / total * 100:F1}%)";
+        }
+        return d;
+    }
+
+    public StorageExtras GetExtras()
+    {
+        bool usageAccess = HasUsageAccess();
+        if (usageAccess != _lastUsageAccess)
+        {
+            _extras = null;
+            _lastUsageAccess = usageAccess;
+        }
+
+        var mediaAccess = MediaAccess();
+        if (mediaAccess != _lastMediaAccess)
+        {
+            _extras = null;
+            _lastMediaAccess = mediaAccess;
+        }
+
+        if (_extras != null && DateTime.UtcNow - _extrasAtUtc < TimeSpan.FromSeconds(30))
+            return _extras;
+        _extras = BuildExtras();
+        _extrasAtUtc = DateTime.UtcNow;
+        return _extras;
+    }
+
+    private static bool HasUsageAccess()
+    {
+        try
+        {
+            var ops = Application.Context.GetSystemService(Context.AppOpsService) as AppOpsManager;
+            return ops?.CheckOpNoThrow(
+                "android:get_usage_stats",
+                Android.OS.Process.MyUid(),
+                Application.Context.PackageName!) == AppOpsManagerMode.Allowed;
+        }
+        catch { return false; }
+    }
+
+    public void OpenUsageAccessSettings()
+    {
+        try
+        {
+            var intent = new Intent(Android.Provider.Settings.ActionUsageAccessSettings);
+            intent.AddFlags(ActivityFlags.NewTask);
+            Application.Context.StartActivity(intent);
+        }
+        catch (Exception e)
+        {
+            Android.Util.Log.Warn("PerfMon", $"Could not open usage access settings: {e.Message}");
+        }
+    }
+
+    public void RequestMediaAccess() => MediaAccessHost.Request?.Invoke();
+
+    private static (bool Images, bool Videos, bool Audio) MediaAccess()
+    {
+        if (OperatingSystem.IsAndroidVersionAtLeast(33))
+            return (
+                Application.Context.CheckSelfPermission(Android.Manifest.Permission.ReadMediaImages) == Permission.Granted,
+                Application.Context.CheckSelfPermission(Android.Manifest.Permission.ReadMediaVideo) == Permission.Granted,
+                Application.Context.CheckSelfPermission(Android.Manifest.Permission.ReadMediaAudio) == Permission.Granted);
+
+        bool external = Application.Context.CheckSelfPermission(Android.Manifest.Permission.ReadExternalStorage) == Permission.Granted;
+        return (external, external, external);
+    }
+
+    // null means the read failed; a failed read is not a measured zero.
+    private static long? SumMedia(Android.Net.Uri? uri)
+    {
+        if (uri == null) return null;
+        try
+        {
+            string column = $"SUM({MediaStore.IMediaColumns.Size})";
+            string? selection = OperatingSystem.IsAndroidVersionAtLeast(29)
+                ? $"{MediaStore.IMediaColumns.IsPending} = 0" : null;
+            var resolver = Application.Context.ContentResolver;
+            if (resolver == null) return null;
+            using var cursor = resolver.Query(uri, new[] { column }, selection, null, null);
+            if (cursor == null || !cursor.MoveToFirst() || cursor.IsNull(0)) return null;
+            return cursor.GetLong(0);
+        }
+        catch { return null; }
+    }
+
+    private static Android.Net.Uri? MediaUri(string kind)
+    {
+        if (OperatingSystem.IsAndroidVersionAtLeast(29))
+        {
+            return kind switch
+            {
+                "images" => MediaStore.Images.Media.GetContentUri(MediaStore.VolumeExternal),
+                "videos" => MediaStore.Video.Media.GetContentUri(MediaStore.VolumeExternal),
+                _ => MediaStore.Audio.Media.GetContentUri(MediaStore.VolumeExternal)
+            };
+        }
+
+        return kind switch
+        {
+            "images" => MediaStore.Images.Media.ExternalContentUri,
+            "videos" => MediaStore.Video.Media.ExternalContentUri,
+            _ => MediaStore.Audio.Media.ExternalContentUri
+        };
+    }
+
+    private StorageExtras BuildExtras()
+    {
+        var extras = new StorageExtras();
+
+        try
+        {
+            foreach (string line in File.ReadLines("/proc/mounts"))
+            {
+                string[] fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (fields.Length < 4 || fields[1] != "/data") continue;
+                extras.FileSystem = $"{fields[2]}{(fields[3].Split(',').Contains("ro") ? " (read-only)" : " (read-write)")}";
+                break;
             }
         }
         catch { }
 
-        total ??= dataTotal;
-        if (total is not double t) return s;
-
-        s.Capacity = $"{Math.Round(t / (1024.0 * 1024 * 1024), 0)} GB";
-        s.Formatted = s.Capacity;
-
-        if (dataFree is double free)
+        try
         {
-            double used = t - free;
-            s.UsedText = $"{Fmt.Gb(used)} ({used / t * 100:F1}%)";
-            s.FreeText = $"{Fmt.Gb(free)} ({free / t * 100:F1}%)";
+            using var stat = new Android.OS.StatFs("/data");
+            long blockSize = stat.BlockSizeLong;
+            extras.BlockSize = blockSize >= 1024 ? $"{blockSize / 1024} KB" : $"{blockSize} B";
+        }
+        catch { }
 
-            if (dataTotal is double dt)
+        bool usageAccess = HasUsageAccess();
+        extras.UsageAccessGranted = usageAccess;
+        var numbers = ReadStorageNumbers();
+
+        if (usageAccess && numbers is { Free: double freeBytes } totals)
+        {
+            try
             {
-                s.AppsAndDataText = $"{Fmt.Gb(dt - free)} ({(dt - free) / t * 100:F1}%)";
+                if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                {
+                    var ssm = Application.Context.GetSystemService(Context.StorageStatsService)
+                              as Android.App.Usage.StorageStatsManager;
+                    var uuid = Android.OS.Storage.StorageManager.UuidDefault;
+                    var user = Android.OS.Process.MyUserHandle();
+                    if (ssm != null && uuid != null && user != null)
+                    {
+                        var stats = ssm.QueryStatsForUser(uuid, user);
+                        if (stats != null)
+                        {
+                            double used = totals.Total - freeBytes;
+                            var media = MediaAccess();
+                            long? photos = media.Images ? SumMedia(MediaUri("images")) : null;
+                            long? videos = media.Videos ? SumMedia(MediaUri("videos")) : null;
+                            long? audio = media.Audio ? SumMedia(MediaUri("audio")) : null;
 
-                if (fromStorageStats && t > dt)
-                    s.SystemReservedText = $"{Fmt.Gb(t - dt)} ({(t - dt) / t * 100:F1}%)";
+                            long other = Math.Max(0, (long)used - stats.AppBytes - stats.DataBytes
+                                - (photos ?? 0) - (videos ?? 0) - (audio ?? 0));
+                            extras.Breakdown = new StorageBreakdown
+                            {
+                                Apps = Fmt.Bytes(stats.AppBytes),
+                                AppData = Fmt.Bytes(Math.Max(0, stats.DataBytes - stats.CacheBytes)),
+                                AppCache = Fmt.Bytes(stats.CacheBytes),
+                                // An unreadable total stays in Other and the row hides.
+                                Photos = photos is long p ? Fmt.Bytes(p) : null,
+                                Videos = videos is long v ? Fmt.Bytes(v) : null,
+                                Audio = audio is long a ? Fmt.Bytes(a) : null,
+                                Other = Fmt.Bytes(other)
+                            };
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        extras.Volumes = ReadVolumes();
+        return extras;
+    }
+
+    private static IReadOnlyList<StorageVolumeInfo> ReadVolumes()
+    {
+        var volumes = new List<StorageVolumeInfo>();
+        try
+        {
+            var sm = Application.Context.GetSystemService(Context.StorageService)
+                     as Android.OS.Storage.StorageManager;
+            var volumeList = sm?.StorageVolumes;
+            if (volumeList == null) return volumes;
+
+            Android.App.Usage.StorageStatsManager? ssm = null;
+            if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                ssm = Application.Context.GetSystemService(Context.StorageStatsService)
+                      as Android.App.Usage.StorageStatsManager;
+
+            foreach (var v in volumeList)
+            {
+                try
+                {
+                    if (v.IsPrimary) continue;
+                    if (v.State != "mounted") continue;
+
+                    double? total = null, free = null;
+                    Java.Util.UUID? uuid = null;
+                    try
+                    {
+                        if (v.Uuid != null) uuid = Java.Util.UUID.FromString(v.Uuid);
+                    }
+                    catch { }
+
+                    if (OperatingSystem.IsAndroidVersionAtLeast(26) && ssm != null && uuid != null)
+                    {
+                        total = ssm.GetTotalBytes(uuid);
+                        free = ssm.GetFreeBytes(uuid);
+                    }
+                    if (total == null && OperatingSystem.IsAndroidVersionAtLeast(30) && v.Directory != null)
+                    {
+                        using var stat = new Android.OS.StatFs(v.Directory.AbsolutePath);
+                        total = stat.TotalBytes;
+                        free = stat.AvailableBytes;
+                    }
+                    if (total is not double t || t <= 0) continue;
+                    // Without a free figure the fill would read as 100% used; hide instead.
+                    if (free is not double f) continue;
+
+                    double used = Math.Max(0, t - f);
+                    string? name = v.GetDescription(Application.Context);
+                    volumes.Add(new StorageVolumeInfo
+                    {
+                        Name = string.IsNullOrWhiteSpace(name) ? "Storage" : name,
+                        UsageText = $"{Fmt.Bytes(used)} of {Fmt.Bytes(t)}",
+                        UsedPercent = used / t * 100
+                    });
+                }
+                catch { }
             }
         }
-        return s;
+        catch { }
+        return volumes;
     }
 
     // System-wide disk I/O needs root on Android; this app's own I/O is not shown,
@@ -471,7 +745,7 @@ public sealed class AndroidDiskProvider : IDiskProvider
     public DiskSample? Sample() => null;
 }
 
-public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
+public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider, IGpuEnvironmentProvider
 {
     private static GpuSpecs ToSpecs(GpuInfo g) => new()
     {
@@ -530,14 +804,20 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
                         ?? Fmt.ReadText("/sys/kernel/gpu/gpu_model")
                         ?? Fmt.ReadText("/sys/class/kgsl/kgsl-3d0/gpu_model");
 
+        string? gles = TruncateGlVersion(gl?.Version);
+        string? vulkan = ReadVulkanVersion();
+
         return new List<GpuInfo>
         {
             new()
             {
                 Name = string.IsNullOrWhiteSpace(model) ? soc : model,
                 Vendor = gl?.Vendor,
-                GraphicsApi = TruncateGlVersion(gl?.Version),
-                // DriverVersion/Date/Location have no Android equivalent; null hides them.
+                GraphicsApi = gles == null ? null
+                    : vulkan == null ? gles
+                    : $"{gles} · Vulkan {vulkan}",
+                DriverVersion = DriverBuild(gl?.Version),
+                // DriverDate/Location have no Android equivalent; null hides them.
                 Kind = "Integrated"
             }
         };
@@ -551,6 +831,35 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
         return marker > 0 ? version[..marker].Trim() : version.Trim();
     }
 
+    // "OpenGL ES 3.2 v1.r54p1-12eac0..." -> "v1.r54p1-12eac0..."
+    private static string? DriverBuild(string? version)
+    {
+        if (string.IsNullOrEmpty(version)) return null;
+        int marker = version.IndexOf(" v", StringComparison.Ordinal);
+        return marker > 0 ? version[(marker + 1)..].Trim() : null;
+    }
+
+    // android.hardware.vulkan.version packs major/minor/patch as Vulkan does.
+    private static string? ReadVulkanVersion()
+    {
+        try
+        {
+            var features = Application.Context.PackageManager?.GetSystemAvailableFeatures();
+            if (features == null) return null;
+            foreach (var f in features)
+            {
+                if (f.Name != "android.hardware.vulkan.version" || f.Version == 0) continue;
+                int v = f.Version;
+                int major = v >> 22;
+                int minor = (v >> 12) & 0x3FF;
+                int patch = v & 0xFFF;
+                return patch > 0 ? $"{major}.{minor}.{patch}" : $"{major}.{minor}";
+            }
+        }
+        catch { }
+        return null;
+    }
+
     public IReadOnlyList<GpuInfo> SampleGpuList()
     {
         var list = new List<GpuInfo>();
@@ -559,9 +868,6 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
             var info = Clone(g);
             info.UtilizationText = TryReadGpuUtilization();
             info.MemoryUsage = null;
-
-            string? temp = ReadGpuTemperature() ?? ReadFallbackThermal();
-            info.TemperatureText = temp;
 
             list.Add(info);
         }
@@ -599,81 +905,73 @@ public sealed class AndroidGpuProvider : IGpuProvider, IGpuListProvider
         return null;
     }
 
-    private static string? ReadGpuTemperature()
+    public GpuEnvironment GetEnvironment()
     {
+        var env = new GpuEnvironment();
         try
         {
-            const string root = "/sys/class/thermal";
-            if (!Directory.Exists(root)) return null;
-            foreach (string zone in Directory.GetDirectories(root, "thermal_zone*"))
+            var dm = Application.Context.GetSystemService(Context.DisplayService) as DisplayManager;
+            var display = dm?.GetDisplay(0);
+            if (display == null) return env;
+
+            var metrics = new Android.Util.DisplayMetrics();
+            display.GetRealMetrics(metrics);
+            env.DisplayResolution = $"{metrics.WidthPixels} × {metrics.HeightPixels}";
+
+            int current = (int)Math.Round(display.RefreshRate);
+            int max = current;
+            if (OperatingSystem.IsAndroidVersionAtLeast(23))
             {
-                string? type = Fmt.ReadText(Path.Combine(zone, "type"));
-                if (type == null || !IsGpuZone(type)) continue;
-                long? raw = Fmt.ReadLong(Path.Combine(zone, "temp"));
-                if (raw == null) continue;
-                double c = raw > 1000 ? raw.Value / 1000.0 : raw.Value;
-                return $"{c:F1} °C ({type})";
+                var modes = display.GetSupportedModes();
+                if (modes != null && modes.Length > 0)
+                    max = (int)Math.Round(modes.Max(m => m.RefreshRate));
             }
-            return null;
-        }
-        catch { return null; }
-    }
+            env.RefreshRate = max > current ? $"{current} Hz (max {max} Hz)" : $"{current} Hz";
 
-    private static bool IsGpuZone(string type)
-    {
-        string t = type.ToLowerInvariant();
-        return t.Contains("gpu") || t.Contains("g3d") || t.Contains("gpuss")
-            || t.Contains("mali") || t.Contains("kgsl");
-    }
-
-    private static string? ReadFallbackThermal()
-    {
-        try
-        {
-            var filter = new IntentFilter(Intent.ActionBatteryChanged);
-            var battery = Application.Context.RegisterReceiver(null, filter);
-            int tenths = battery?.GetIntExtra(Android.OS.BatteryManager.ExtraTemperature, int.MinValue) ?? int.MinValue;
-            if (tenths != int.MinValue && tenths > 0)
-                return $"{tenths / 10.0:F1} °C (battery)";
-        }
-        catch { }
-
-        try
-        {
-            if (OperatingSystem.IsAndroidVersionAtLeast(30)
-                && Application.Context.GetSystemService(Context.PowerService) is Android.OS.PowerManager pm)
+            if (OperatingSystem.IsAndroidVersionAtLeast(24))
             {
-                float headroom = pm.GetThermalHeadroom(0);
-                if (!float.IsNaN(headroom))
-                    return $"Thermal headroom {headroom:F2} ({(headroom >= 1f ? "fine" : "throttling")})";
+                var types = display.GetHdrCapabilities()?.GetSupportedHdrTypes() ?? Array.Empty<HdrType>();
+                var names = types.Select(t => t switch
+                {
+                    HdrType.DolbyVision => "Dolby Vision",
+                    HdrType.Hdr10 => "HDR10",
+                    HdrType.Hlg => "HLG",
+                    _ => (string?)null
+                }).Where(n => n != null).ToList();
+                if (OperatingSystem.IsAndroidVersionAtLeast(29) && types.Contains(HdrType.Hdr10Plus))
+                    names.Add("HDR10+");
+                env.Hdr = names.Count == 0 ? "No" : string.Join(", ", names);
             }
-        }
-        catch { }
 
-        try
-        {
-            if (OperatingSystem.IsAndroidVersionAtLeast(29)
-                && Application.Context.GetSystemService(Context.PowerService) is Android.OS.PowerManager pm)
+            if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                env.WideColor = display.IsWideColorGamut ? "Yes" : "No";
+
+            if (OperatingSystem.IsAndroidVersionAtLeast(29))
             {
-                int status = (int)pm.CurrentThermalStatus;
-                if (status > 0) return $"SoC thermal: {ThermalStatusText(status)}";
+                var power = Application.Context.GetSystemService(Context.PowerService) as PowerManager;
+                if (power != null)
+                {
+                    env.ThermalStatus = power.CurrentThermalStatus switch
+                    {
+                        ThermalStatus.None => "None",
+                        ThermalStatus.Light => "Light",
+                        ThermalStatus.Moderate => "Moderate",
+                        ThermalStatus.Severe => "Severe",
+                        ThermalStatus.Critical => "Critical",
+                        ThermalStatus.Emergency => "Emergency",
+                        ThermalStatus.Shutdown => "Shutdown",
+                        _ => null
+                    };
+                }
             }
         }
-        catch { }
-
-        return null;
+        catch (Exception e)
+        {
+            // Sampled every 2 s, so this stays at debug level instead of flooding logcat.
+            Android.Util.Log.Debug("PerfMon", $"GPU environment probe failed: {e.Message}");
+        }
+        return env;
     }
-
-    private static string ThermalStatusText(int status) => status switch
-    {
-        1 => "light",
-        2 => "moderate",
-        3 => "severe",
-        4 => "critical",
-        5 => "emergency",
-        6 => "shutdown",
-        _ => "none"
-    };
 }
 
 public sealed class AndroidWifiProvider : IWifiProvider

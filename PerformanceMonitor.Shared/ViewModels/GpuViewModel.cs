@@ -47,12 +47,33 @@ public partial class GpuViewModel : ViewModelBase
 
     [ObservableProperty] private string? _gpuVendor;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDisplay))]
+    private string? _displayResolution;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDisplay))]
+    private string? _refreshRateText;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDisplay))]
+    private string? _hdrText;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDisplay))]
+    private string? _wideColorText;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasThermal))]
+    private string? _thermalStatus;
+
+    public bool HasDisplay =>
+        DisplayResolution != null || RefreshRateText != null || HdrText != null || WideColorText != null;
+    public bool HasThermal => ThermalStatus != null;
+
     // ---- Integrated / Dedicated split ----
     public GpuSubViewModel Integrated { get; } = new GpuSubViewModel("Integrated", "No integrated GPU");
     public GpuSubViewModel Dedicated { get; } = new GpuSubViewModel("Dedicated", "No dedicated GPU");
 
     private readonly IGpuProvider _provider;
     private readonly IGpuListProvider? _listProvider;
+    private readonly IGpuEnvironmentProvider? _environment;
     private CancellationTokenSource? _cts;
     private bool _specsLoaded;
 
@@ -62,6 +83,7 @@ public partial class GpuViewModel : ViewModelBase
     {
         _provider = provider;
         _listProvider = provider as IGpuListProvider;
+        _environment = provider as IGpuEnvironmentProvider;
     }
 
     public void Start()
@@ -97,6 +119,18 @@ public partial class GpuViewModel : ViewModelBase
             var s = await Task.Run(() => _provider.GetSpecs());
             ApplySingleSpec(s);
         }
+
+        if (_environment != null)
+            ApplyEnvironment(await Task.Run(() => _environment.GetEnvironment()));
+    }
+
+    private void ApplyEnvironment(GpuEnvironment env)
+    {
+        DisplayResolution = env.DisplayResolution;
+        RefreshRateText = env.RefreshRate;
+        HdrText = env.Hdr;
+        WideColorText = env.WideColor;
+        ThermalStatus = env.ThermalStatus;
     }
 
     private void ApplySingleSpec(GpuSpecs s)
@@ -173,6 +207,7 @@ public partial class GpuViewModel : ViewModelBase
                         var samples = _listProvider.SampleGpuList();
                         var igpu = PickPrimary(samples, GpuInfo => GpuInfo.Kind == "Integrated");
                         var dgpu = PickPrimary(samples, GpuInfo => GpuInfo.Kind == "Dedicated");
+                        var env = _environment?.GetEnvironment();
 
                         Dispatcher.UIThread.Post(() =>
                         {
@@ -182,6 +217,8 @@ public partial class GpuViewModel : ViewModelBase
                             var primary = GpuMapPrimary(samples);
                             if (primary != null) ApplySampleToFlat(primary);
                             else ClearFlatSample();
+
+                            if (env != null) ApplyEnvironment(env);
                         });
                     }
                     else

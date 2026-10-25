@@ -1,6 +1,7 @@
 ﻿using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -95,14 +96,20 @@ public partial class WifiViewModel : ViewModelBase
         long oldBytesSent = 0;
         long oldBytesReceived = 0;
         int tick = 0;
+        long lastSample = Stopwatch.GetTimestamp();
 
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        // shortcut: 2 s matches Android counter granularity; add a rolling average
+        // if bursts still read as zero on the wire.
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
 
         try
         {
             while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
                 tick++;
+                double seconds = Stopwatch.GetElapsedTime(lastSample).TotalSeconds;
+                lastSample = Stopwatch.GetTimestamp();
+                if (seconds <= 0) seconds = 1;
                 try
                 {
                 var snap = _provider.GetSnapshot();
@@ -119,8 +126,8 @@ public partial class WifiViewModel : ViewModelBase
 
                         if (oldBytesSent > 0 && oldBytesReceived > 0)
                         {
-                            double bitsSent = Math.Max(0, sent - oldBytesSent) * 8.0;
-                            double bitsReceived = Math.Max(0, received - oldBytesReceived) * 8.0;
+                            double bitsSent = Math.Max(0, sent - oldBytesSent) * 8.0 / seconds;
+                            double bitsReceived = Math.Max(0, received - oldBytesReceived) * 8.0 / seconds;
                             sendKbps = bitsSent / 1000.0;
                             receiveKbps = bitsReceived / 1000.0;
                             sendText = FormatBitrate(bitsSent);
@@ -235,8 +242,8 @@ public partial class WifiViewModel : ViewModelBase
                     long bytesSentPerSec = Math.Max(0, newBytesSent - oldBytesSent);
                     long bytesReceivedPerSec = Math.Max(0, newBytesReceived - oldBytesReceived);
 
-                    double bitsSentPerSec = bytesSentPerSec * 8;
-                    double bitsReceivedPerSec = bytesReceivedPerSec * 8;
+                    double bitsSentPerSec = bytesSentPerSec * 8 / seconds;
+                    double bitsReceivedPerSec = bytesReceivedPerSec * 8 / seconds;
 
                     sendValue = bitsSentPerSec / 1000.0;
                     receiveValue = bitsReceivedPerSec / 1000.0;
