@@ -569,6 +569,7 @@ public sealed class AndroidDiskProvider : IDiskProvider, IDiskListProvider, ISto
     }
 
     // null means the read failed; a failed read is not a measured zero.
+    // A query that ran but matched nothing is a measured zero (SUM over no rows is NULL).
     private static long? SumMedia(Android.Net.Uri? uri)
     {
         if (uri == null) return null;
@@ -580,7 +581,8 @@ public sealed class AndroidDiskProvider : IDiskProvider, IDiskListProvider, ISto
             var resolver = Application.Context.ContentResolver;
             if (resolver == null) return null;
             using var cursor = resolver.Query(uri, new[] { column }, selection, null, null);
-            if (cursor == null || !cursor.MoveToFirst() || cursor.IsNull(0)) return null;
+            if (cursor == null) return null;
+            if (!cursor.MoveToFirst() || cursor.IsNull(0)) return 0;
             return cursor.GetLong(0);
         }
         catch { return null; }
@@ -632,6 +634,8 @@ public sealed class AndroidDiskProvider : IDiskProvider, IDiskListProvider, ISto
 
         bool usageAccess = HasUsageAccess();
         extras.UsageAccessGranted = usageAccess;
+        var media = MediaAccess();
+        extras.MediaAccessGranted = media.Images && media.Videos && media.Audio;
         var numbers = ReadStorageNumbers();
 
         if (usageAccess && numbers is { Free: double freeBytes } totals)
@@ -650,7 +654,6 @@ public sealed class AndroidDiskProvider : IDiskProvider, IDiskListProvider, ISto
                         if (stats != null)
                         {
                             double used = totals.Total - freeBytes;
-                            var media = MediaAccess();
                             long? photos = media.Images ? SumMedia(MediaUri("images")) : null;
                             long? videos = media.Videos ? SumMedia(MediaUri("videos")) : null;
                             long? audio = media.Audio ? SumMedia(MediaUri("audio")) : null;

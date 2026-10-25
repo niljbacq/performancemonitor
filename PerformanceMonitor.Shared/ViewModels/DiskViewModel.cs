@@ -61,15 +61,9 @@ public partial class DiskViewModel : ViewModelBase
     [ObservableProperty] private string? _appDataText;
     [ObservableProperty] private string? _appCacheText;
     [ObservableProperty] private string? _otherText;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MediaHintVisible))]
-    private string? _photosText;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MediaHintVisible))]
-    private string? _videosText;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(MediaHintVisible))]
-    private string? _audioText;
+    [ObservableProperty] private string? _photosText;
+    [ObservableProperty] private string? _videosText;
+    [ObservableProperty] private string? _audioText;
 
     private bool _usageAccessGranted;
     public bool UsageAccessGranted
@@ -87,8 +81,19 @@ public partial class DiskViewModel : ViewModelBase
 
     public bool UsageHintVisible => !_usageAccessGranted;
 
-    public bool MediaHintVisible => UsageAccessGranted &&
-        (PhotosText == null || VideosText == null || AudioText == null);
+    private bool _mediaAccessGranted;
+    public bool MediaAccessGranted
+    {
+        get => _mediaAccessGranted;
+        set
+        {
+            if (SetProperty(ref _mediaAccessGranted, value))
+                OnPropertyChanged(nameof(MediaHintVisible));
+        }
+    }
+
+    // Access, not row presence: an empty media collection must not keep the hint alive.
+    public bool MediaHintVisible => UsageAccessGranted && !_mediaAccessGranted;
 
     public ObservableCollection<DiskVolumeViewModel> Volumes { get; } = new();
     public bool HasVolumes => Volumes.Count > 0;
@@ -234,6 +239,7 @@ public partial class DiskViewModel : ViewModelBase
 
         var breakdown = extras.Breakdown;
         UsageAccessGranted = extras.UsageAccessGranted;
+        MediaAccessGranted = extras.MediaAccessGranted;
         AppsText = breakdown?.Apps;
         AppDataText = breakdown?.AppData;
         AppCacheText = breakdown?.AppCache;

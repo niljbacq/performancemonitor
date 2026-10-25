@@ -168,6 +168,8 @@ public sealed class StorageExtras
     public string? BlockSize { get; set; }
     // True only when Usage Access was actually granted, not merely when the breakdown loaded.
     public bool UsageAccessGranted { get; set; }
+    // True only when every media permission is granted, so the hint tracks access, not empty collections.
+    public bool MediaAccessGranted { get; set; }
     public IReadOnlyList<StorageVolumeInfo> Volumes { get; set; } = Array.Empty<StorageVolumeInfo>();
     public StorageBreakdown? Breakdown { get; set; }
 }

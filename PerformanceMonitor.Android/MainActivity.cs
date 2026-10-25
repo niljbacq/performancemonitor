@@ -115,8 +115,35 @@ public class MainActivity : AvaloniaMainActivity
             needed.Add(Android.Manifest.Permission.ReadExternalStorage);
         }
 
-        if (needed.Count > 0)
-            RequestPermissions(needed.ToArray(), MediaPermissionRequestCode);
+        if (needed.Count == 0) return;
+
+        // Android stops showing the dialog after a "don't allow" that sticks, so a second
+        // tap must open Settings instead of doing nothing.
+        var prefs = GetSharedPreferences("perfmon", FileCreationMode.Private);
+        bool asked = prefs?.GetBoolean("media_asked", false) ?? false;
+        if (asked && needed.Exists(p => !ShouldShowRequestPermissionRationale(p)))
+        {
+            OpenAppSettings();
+            return;
+        }
+
+        prefs?.Edit()?.PutBoolean("media_asked", true)?.Apply();
+        RequestPermissions(needed.ToArray(), MediaPermissionRequestCode);
+    }
+
+    private void OpenAppSettings()
+    {
+        try
+        {
+            var intent = new Intent(Settings.ActionApplicationDetailsSettings,
+                Android.Net.Uri.Parse($"package:{PackageName}"));
+            intent.AddFlags(ActivityFlags.NewTask);
+            StartActivity(intent);
+        }
+        catch (Exception ex)
+        {
+            Android.Util.Log.Warn("PerfMon", $"Could not open app settings: {ex.Message}");
+        }
     }
 
     // Starts the special-use foreground service so sampling (and CSV logging)
