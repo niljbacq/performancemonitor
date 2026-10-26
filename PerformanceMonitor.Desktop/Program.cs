@@ -15,18 +15,21 @@ internal class Program
     private static OverlayWindow? _overlay;
 
     // Initialization code. Don't use any Avalonia, third-party APIs or any
-
     // SynchronizationContext-reliant code before BuildAvaloniaApp() has been called!
-
     [STAThread]
+    public static void Main(string[] args)
+    {
+        // Create the Start Menu shortcut if it doesn't exist (Windows only)
+        if (OperatingSystem.IsWindows())
+        {
+            ShortcutHelper.TryCreateStartMenuShortcut();
+        }
 
-    public static void Main(string[] args) => BuildAvaloniaApp()
-
-        .StartWithClassicDesktopLifetime(args);
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
 
 
     // Avalonia configuration, don't remove; also used by visual designer.
-
     public static AppBuilder BuildAvaloniaApp()
 
     {

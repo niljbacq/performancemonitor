@@ -52,81 +52,301 @@ public abstract class DiskProviderBase : IDiskProvider
 }
 
 [SupportedOSPlatform("windows")]
-public sealed class WindowsDiskProvider : DiskProviderBase
+public sealed class WindowsDiskProvider : DiskProviderBase, IDiskListProvider
 {
-    // WMI formatted perf data keeps English class/property names on non-English
-    // Windows (PerformanceCounter category names are localised).
-    private readonly ManagementObjectSearcher? _perfSearcher;
+    private List<DiskInfo>? _cachedSpecs;
+    private readonly object _lock = new();
 
-    public WindowsDiskProvider()
+    // ---- Legacy Paths (Backward Compatibility) ----
+    
+    public override DiskSpecs GetSpecs()
     {
-        try
+        var list = GetDiskList();
+        var primary = list.FirstOrDefault(d => d.SystemDisk == "Yes") ?? list.FirstOrDefault();
+        if (primary == null) return new DiskSpecs { DiskName = "Disk", ModelName = "No disk detected", Type = "Unknown" };
+
+        return new DiskSpecs
         {
-            _perfSearcher = new ManagementObjectSearcher(
-                "SELECT * FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk");
-        }
-        catch { _perfSearcher = null; }
-    }
-
-    protected override bool IsSystemDrive(DriveInfo drive)
-    {
-        string osDriveLetter = Path.GetPathRoot(Environment.SystemDirectory)?.TrimEnd('\\') ?? "C:";
-        return drive.Name.StartsWith(osDriveLetter, StringComparison.OrdinalIgnoreCase);
-    }
-
-    protected override void LoadPlatformDetails(DiskSpecs s)
-    {
-        try
-        {
-            using var driveSearcher = new ManagementObjectSearcher("SELECT Index, DeviceID FROM Win32_DiskDrive");
-            foreach (var drive in driveSearcher.Get())
-            {
-                s.DiskName = $"Disk {drive["Index"]?.ToString() ?? "0"}";
-                break;
-            }
-
-            using var mediaSearcher = new ManagementObjectSearcher(
-                @"root\Microsoft\Windows\Storage", "SELECT MediaType, BusType FROM MSFT_PhysicalDisk");
-            foreach (var media in mediaSearcher.Get())
-            {
-                ushort mediaType = Convert.ToUInt16(media["MediaType"]);
-                ushort busType = Convert.ToUInt16(media["BusType"]);
-
-                // Unknown media/bus stays null instead of guessing SSD.
-                s.Type = busType == 17 ? "NVMe SSD"
-                       : mediaType == 4 ? "SSD"
-                       : mediaType == 3 ? "HDD"
-                       : null;
-                break;
-            }
-
-            using var pageFileSearcher = new ManagementObjectSearcher("SELECT Name FROM Win32_PageFileSetting");
-            s.PageFile = pageFileSearcher.Get().Count > 0 ? "Yes" : "No";
-        }
-        catch
-        {
-            s.Type = null;
-        }
+            DiskName = primary.DiskName, ModelName = primary.ModelName, Capacity = primary.Capacity,
+            Formatted = primary.Formatted, SystemDisk = primary.SystemDisk, PageFile = primary.PageFile,
+            Type = primary.Type, UsedText = primary.UsedText, FreeText = primary.FreeText,
+            AppsAndDataText = primary.AppsAndDataText, SystemReservedText = primary.SystemReservedText,
+            PressureText = primary.PressureText
+        };
     }
 
     public override DiskSample? Sample()
     {
-        if (_perfSearcher == null) return null;
+        var samples = SampleDiskList();
+        var primary = samples.FirstOrDefault(d => d.SystemDisk == "Yes") ?? samples.FirstOrDefault();
+        if (primary == null) return null;
 
+        return new DiskSample
+        {
+            ReadBytesPerSec = primary.ReadBytesPerSec, WriteBytesPerSec = primary.WriteBytesPerSec,
+            ActivePercent = primary.ActivePercent, ResponseMs = primary.ResponseMs,
+            NotSupported = primary.NotSupported, NotSupportedMessage = primary.NotSupportedMessage
+        };
+    }
+
+    // ---- Multi-Disk Path ----
+
+    public IReadOnlyList<DiskInfo> GetDiskList()
+    {
+        lock (_lock)
+        {
+            _cachedSpecs ??= BuildDiskList();
+            return _cachedSpecs;
+        }
+    }
+
+    public IReadOnlyList<DiskInfo> SampleDiskList()
+    {
+        var specs = GetDiskList();
+        var result = new List<DiskInfo>(specs.Count);
+        
+        // Fetch performance data for all disks at once
+        var perfData = GetPerfData();
+
+        foreach (var spec in specs)
+        {
+            var info = CloneSpec(spec);
+            if (spec.DeviceId != null && perfData.TryGetValue(spec.DeviceId, out var perf))
+            {
+                info.ReadBytesPerSec = perf.Read;
+                info.WriteBytesPerSec = perf.Write;
+                info.ActivePercent = perf.Active;
+                info.ResponseMs = perf.Response;
+            }
+            result.Add(info);
+        }
+        return result;
+    }
+
+    private static DiskInfo CloneSpec(DiskInfo src) => new()
+    {
+        DeviceId = src.DeviceId, DiskName = src.DiskName, ModelName = src.ModelName, Type = src.Type,
+        Capacity = src.Capacity, Formatted = src.Formatted, SystemDisk = src.SystemDisk, PageFile = src.PageFile,
+        UsedText = src.UsedText, FreeText = src.FreeText, AppsAndDataText = src.AppsAndDataText,
+        SystemReservedText = src.SystemReservedText, PressureText = src.PressureText
+    };
+
+    private List<DiskInfo> BuildDiskList()
+    {
+        var result = new List<DiskInfo>();
+        string osDrive = Path.GetPathRoot(Environment.SystemDirectory)?.TrimEnd('\\') ?? "C:";
+        
+        // 1. Get MSFT PhysicalDisk data (BusType, MediaType) keyed by DeviceID (Index)
+        var msftMap = new Dictionary<string, (ushort MediaType, ushort BusType)>();
         try
         {
-            foreach (ManagementObject obj in _perfSearcher.Get())
+            using var mediaSearcher = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT DeviceId, MediaType, BusType FROM MSFT_PhysicalDisk");
+            foreach (ManagementBaseObject? media in mediaSearcher.Get())
             {
-                if (!string.Equals(obj["Name"]?.ToString(), "_Total", StringComparison.Ordinal))
-                    continue;
+                if (media == null) continue;
+                string id = media["DeviceId"]?.ToString() ?? "";
+                if (!string.IsNullOrEmpty(id))
+                    msftMap[id] = (Convert.ToUInt16(media["MediaType"]), Convert.ToUInt16(media["BusType"]));
+            }
+        }
+        catch { }
 
-                return new DiskSample
+        // 2. Iterate Physical Disks
+        try
+        {
+            using var diskSearcher = new ManagementObjectSearcher("SELECT Index, DeviceID, Model, Size FROM Win32_DiskDrive");
+            foreach (ManagementBaseObject? disk in diskSearcher.Get())
+            {
+                if (disk == null) continue;
+                string indexStr = disk["Index"]?.ToString() ?? "0";
+                string model = disk["Model"]?.ToString()?.Trim() ?? "Generic Storage Device";
+                double sizeBytes = Convert.ToDouble(disk["Size"] ?? 0);
+
+                // Determine Type (Admin-free IOCTL -> MSFT fallback -> Unknown)
+                string type = "Unknown";
+                bool? isSsd = SeekPenaltyClassifier.IsSsd(int.Parse(indexStr));
+                
+                if (isSsd == true) type = "SSD";
+                else if (isSsd == false) type = "HDD";
+                else if (msftMap.TryGetValue(indexStr, out var msft))
                 {
-                    ReadBytesPerSec = Convert.ToDouble(obj["DiskReadBytesPerSec"]),
-                    WriteBytesPerSec = Convert.ToDouble(obj["DiskWriteBytesPerSec"]),
-                    ActivePercent = Math.Clamp(100 - Convert.ToDouble(obj["PercentIdleTime"]), 0, 100),
-                    ResponseMs = Convert.ToDouble(obj["AvgDiskSecPerTransfer"]) * 1000.0
-                };
+                    type = msft.BusType == 17 ? "NVMe SSD" : msft.MediaType == 4 ? "SSD" : msft.MediaType == 3 ? "HDD" : "Unknown";
+                }
+
+                // Find corresponding logical drives (letters) for this physical disk
+                var letters = GetLogicalDrivesForPhysicalDisk(indexStr);
+                double totalSpace = letters.Sum(l => l.Size);
+                double freeSpace = letters.Sum(l => l.Free);
+                
+                // Fallback to physical size if logical partitions aren't mounted
+                double capacityBytes = totalSpace > 0 ? totalSpace : sizeBytes;
+                double usedBytes = capacityBytes - freeSpace;
+
+                string capacityText = capacityBytes > 0 ? $"{Math.Round(capacityBytes / (1024.0 * 1024 * 1024), 0)} GB" : "-";
+                string? usedText = capacityBytes > 0 ? $"{Math.Round(usedBytes / (1024.0 * 1024 * 1024), 1)} GB ({(usedBytes / capacityBytes) * 100:F1}%)" : null;
+                string? freeText = capacityBytes > 0 ? $"{Math.Round(freeSpace / (1024.0 * 1024 * 1024), 1)} GB ({(freeSpace / capacityBytes) * 100:F1}%)" : null;
+                
+                bool isSystem = letters.Any(l => l.Letter.StartsWith(osDrive, StringComparison.OrdinalIgnoreCase));
+                bool hasPageFile = CheckPageFile(letters.Select(l => l.Letter));
+
+                result.Add(new DiskInfo
+                {
+                    DeviceId = indexStr,
+                    DiskName = $"Disk {indexStr}",
+                    ModelName = model,
+                    Type = type,
+                    Capacity = capacityText,
+                    Formatted = capacityText,
+                    SystemDisk = isSystem ? "Yes" : "No",
+                    PageFile = hasPageFile ? "Yes" : "No",
+                    UsedText = usedText,
+                    FreeText = freeText,
+                    FreeBytes = freeSpace > 0 ? freeSpace : null
+                });
+            }
+        }
+        catch { }
+
+        // If no disks were found via Win32_DiskDrive, fall back to a single generic disk
+        if (result.Count == 0)
+        {
+            result.Add(new DiskInfo { DiskName = "Disk", ModelName = "No disk detected", Type = "Unknown" });
+        }
+
+        return result;
+    }
+
+    private static List<(string Letter, double Size, double Free)> GetLogicalDrivesForPhysicalDisk(string index)
+    {
+        var result = new List<(string, double, double)>();
+        try
+        {
+            // WMI association query to find partitions for this specific disk
+            string query = $"ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='\\\\.\\PHYSICALDRIVE{index}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition";
+            using var partSearcher = new ManagementObjectSearcher(query);
+            
+            foreach (ManagementBaseObject? part in partSearcher.Get())
+            {
+                if (part == null) continue;
+                string partDeviceId = part["DeviceID"]?.ToString()?.Replace("\\", "\\\\") ?? "";
+                if (string.IsNullOrEmpty(partDeviceId)) continue;
+
+                string ldQuery = $"ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{partDeviceId}'}} WHERE AssocClass=Win32_LogicalDiskToPartition";
+                using var ldSearcher = new ManagementObjectSearcher(ldQuery);
+                
+                foreach (ManagementBaseObject? ld in ldSearcher.Get())
+                {
+                    if (ld == null) continue;
+                    string letter = ld["DeviceID"]?.ToString() ?? "";
+                    double size = Convert.ToDouble(ld["Size"] ?? 0);
+                    double free = Convert.ToDouble(ld["FreeSpace"] ?? 0);
+                    if (!string.IsNullOrEmpty(letter)) result.Add((letter, size, free));
+                }
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    private static bool CheckPageFile(IEnumerable<string> driveLetters)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher("SELECT Name FROM Win32_PageFileSetting");
+            foreach (ManagementBaseObject? pf in searcher.Get())
+            {
+                if (pf == null) continue;
+                string name = pf["Name"]?.ToString() ?? "";
+                if (driveLetters.Any(l => name.StartsWith(l, StringComparison.OrdinalIgnoreCase))) return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    private static Dictionary<string, (double Read, double Write, double Active, double Response)> GetPerfData()
+    {
+        var dict = new Dictionary<string, (double, double, double, double)>();
+        try
+        {
+            using var searcher = new ManagementObjectSearcher("SELECT Name, DiskReadBytesPerSec, DiskWriteBytesPerSec, PercentIdleTime, AvgDiskSecPerTransfer FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk");
+            foreach (ManagementBaseObject? obj in searcher.Get())
+            {
+                if (obj == null) continue;
+                string name = obj["Name"]?.ToString() ?? "";
+                if (name == "_Total") continue;
+
+                // Name format is usually "0 C:" or "1 D:" -> extract the physical index
+                int spaceIdx = name.IndexOf(' ');
+                string index = spaceIdx > 0 ? name[..spaceIdx] : name;
+
+                dict[index] = (
+                    Convert.ToDouble(obj["DiskReadBytesPerSec"]),
+                    Convert.ToDouble(obj["DiskWriteBytesPerSec"]),
+                    Math.Clamp(100 - Convert.ToDouble(obj["PercentIdleTime"]), 0, 100),
+                    Convert.ToDouble(obj["AvgDiskSecPerTransfer"]) * 1000.0
+                );
+            }
+        }
+        catch { }
+        return dict;
+    }
+}
+
+/// <summary>
+/// Admin-free SSD/HDD classifier using DeviceIoControl (StorageDeviceSeekPenaltyProperty).
+/// </summary>
+internal static class SeekPenaltyClassifier
+{
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFile(
+        string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DeviceIoControl(
+        Microsoft.Win32.SafeHandles.SafeFileHandle hDevice, uint dwIoControlCode,
+        IntPtr lpInBuffer, uint nInBufferSize, IntPtr lpOutBuffer, uint nOutBufferSize,
+        out uint lpBytesReturned, IntPtr lpOverlapped);
+
+    private const uint IOCTL_STORAGE_QUERY_PROPERTY = 0x2D1400;
+    private const int StorageDeviceSeekPenaltyProperty = 7;
+
+    public static bool? IsSsd(int physicalDriveIndex)
+    {
+        try
+        {
+            using var handle = CreateFile(
+                $"\\\\.\\PhysicalDrive{physicalDriveIndex}",
+                0, // No access required for properties
+                0x00000001 | 0x00000002, // FILE_SHARE_READ | FILE_SHARE_WRITE
+                IntPtr.Zero, 3, 0, IntPtr.Zero); // OPEN_EXISTING
+
+            if (handle.IsInvalid) return null;
+
+            // Allocate buffers
+            int inBufferSize = 12; // STORAGE_PROPERTY_QUERY
+            int outBufferSize = 12; // DEVICE_SEEK_PENALTY_DESCRIPTOR
+            IntPtr inBuffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(inBufferSize);
+            IntPtr outBuffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(outBufferSize);
+
+            try
+            {
+                // Setup STORAGE_PROPERTY_QUERY
+                System.Runtime.InteropServices.Marshal.WriteInt32(inBuffer, StorageDeviceSeekPenaltyProperty);
+                System.Runtime.InteropServices.Marshal.WriteInt32(inBuffer, 4, 0); // PropertyStandardQuery
+
+                if (DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY, inBuffer, (uint)inBufferSize, outBuffer, (uint)outBufferSize, out _, IntPtr.Zero))
+                {
+                    // DEVICE_SEEK_PENALTY_DESCRIPTOR has Version (4 bytes) and IncursSeekPenalty (1 byte)
+                    bool incursSeekPenalty = System.Runtime.InteropServices.Marshal.ReadByte(outBuffer, 4) != 0;
+                    return !incursSeekPenalty; // False penalty = SSD, True penalty = HDD
+                }
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.FreeHGlobal(inBuffer);
+                System.Runtime.InteropServices.Marshal.FreeHGlobal(outBuffer);
             }
         }
         catch { }
@@ -531,4 +751,3 @@ public sealed class LinuxDiskProvider : DiskProviderBase, IDiskListProvider
         return null;
     }
 }
-    

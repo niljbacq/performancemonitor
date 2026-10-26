@@ -6,6 +6,7 @@
         <AssemblyName>PerformanceMonitor.Desktop</AssemblyName>
         <RootNamespace>TaskManager</RootNamespace>
         <RollForward>LatestMajor</RollForward>
+        <ApplicationIcon>..\PerformanceMonitor.Shared\Assets\app.ico</ApplicationIcon>
     </PropertyGroup>
 
     <ItemGroup>
@@ -14,5 +15,12 @@
 
     <ItemGroup>
         <ProjectReference Include="..\PerformanceMonitor.Shared\PerformanceMonitor.Shared.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\PerformanceMonitor.Shared\Assets\app.ico">
+            <Link>Assets\app.ico</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 </Project>
