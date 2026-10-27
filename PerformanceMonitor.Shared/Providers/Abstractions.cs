@@ -85,7 +85,13 @@ public sealed record MemoryUsage(double TotalGB, double UsedGB, double Percent)
     public string? InactiveText { get; init; }
     public string? SlabText { get; init; }
     public string? PressureText { get; init; }
+
+    // Windows-only rows (Commit/Cached/pools). Linux leaves this empty so its
+    // view renders exactly what it rendered before.
+    public IReadOnlyList<MemoryDetail> Details { get; init; } = Array.Empty<MemoryDetail>();
 }
+
+public sealed record MemoryDetail(string Label, string Value);
 
 // ---- Interfaces ----
 

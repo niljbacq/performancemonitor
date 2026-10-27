@@ -187,6 +187,17 @@
                                 <TextBlock Text="Pressure (PSI)" Foreground="#888888"/>
                                 <TextBlock Text="{Binding PressureText}" Foreground="White" HorizontalAlignment="Right"/>
                             </DockPanel>
+                            <!-- Windows-only rows; empty on Linux, so nothing renders there. -->
+                            <ItemsControl ItemsSource="{Binding Details}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel>
+                                            <TextBlock Text="{Binding Label}" Foreground="#888888"/>
+                                            <TextBlock Text="{Binding Value}" Foreground="White" HorizontalAlignment="Right"/>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
 
                         <UniformGrid Grid.Row="3" Columns="2" Rows="2" VerticalAlignment="Top">
@@ -912,6 +923,13 @@
                                     <DockPanel Classes="mRow" IsVisible="{Binding InactiveText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Inactive"/><TextBlock Classes="mValue" Text="{Binding InactiveText}"/></DockPanel>
                                     <DockPanel Classes="mRow" IsVisible="{Binding SlabText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Slab (kernel)"/><TextBlock Classes="mValue" Text="{Binding SlabText}"/></DockPanel>
                                     <DockPanel Classes="mRow" IsVisible="{Binding PressureText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"><TextBlock Classes="mLabel" Text="Pressure (PSI)"/><TextBlock Classes="mValue" Text="{Binding PressureText}"/></DockPanel>
+                                    <ItemsControl ItemsSource="{Binding Details}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <DockPanel Classes="mRow"><TextBlock Classes="mLabel" Text="{Binding Label}"/><TextBlock Classes="mValue" Text="{Binding Value}"/></DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
