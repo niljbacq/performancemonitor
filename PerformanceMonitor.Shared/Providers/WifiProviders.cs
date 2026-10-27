@@ -5,25 +5,17 @@ using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 
 namespace TaskManager.Providers;
 
+[SupportedOSPlatform("windows")]
 public sealed class WindowsWifiProvider : IWifiProvider
 {
     public WifiDetails GetDetails(string interfaceName)
     {
-        string output = CommandRunner.Run("netsh", "wlan show interfaces", 2000);
-
-        // netsh labels are localised, but the values are not. Pair every
-        // "label: value" line and identify fields by their value shape.
-        var pairs = new List<(string Label, string Value)>();
-        foreach (string line in output.Split('\n'))
-        {
-            int colon = line.IndexOf(':');
-            if (colon <= 0) continue;
-            pairs.Add((line[..colon].Trim(), line[(colon + 1)..].Trim()));
-        }
+        var pairs = ReadNetshPairs();
 
         int bssidIndex = pairs.FindIndex(p =>
             Regex.IsMatch(p.Value, @"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
@@ -51,6 +43,102 @@ public sealed class WindowsWifiProvider : IWifiProvider
             ssid ?? "Connected",
             radio ?? "-",
             signal != null ? $"📶 {signal}" : "-");
+    }
+
+    // netsh labels are localized, but the values are not. Pair every
+    // "label: value" line and identify fields by their value shape.
+    private static List<(string Label, string Value)> ReadNetshPairs()
+    {
+        string output = CommandRunner.Run("netsh", "wlan show interfaces", 2000);
+        var pairs = new List<(string Label, string Value)>();
+        foreach (string line in output.Split('\n'))
+        {
+            int colon = line.IndexOf(':');
+            if (colon <= 0) continue;
+            pairs.Add((line[..colon].Trim(), line[(colon + 1)..].Trim()));
+        }
+        return pairs;
+    }
+
+    public WifiSnapshot? GetSnapshot()
+    {
+        var nic = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
+            .OrderByDescending(n => n.OperationalStatus == OperationalStatus.Up)
+            .FirstOrDefault();
+
+        string adapter = string.IsNullOrWhiteSpace(nic?.Description) ? "Wi-Fi" : nic!.Description;
+        if (nic == null)
+            return new WifiSnapshot(adapter, "Disconnected", "No wireless adapter", "-", "-", "-", "-", null, null);
+
+        var pairs = ReadNetshPairs();
+
+        // Labels are localized; values are not. Identify each field by value shape.
+        int bssidIndex = pairs.FindIndex(p => Regex.IsMatch(p.Value, @"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
+        string? bssid = bssidIndex >= 0 ? pairs[bssidIndex].Value : null;
+        string? ssid = bssidIndex > 0 ? pairs[bssidIndex - 1].Value : null;
+        string? signalText = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^\d{1,3}\s*%$")).Value;
+        string? radio = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^802\.11")).Value;
+        string? band = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^(2\.4|5|6)\s*GHz$")).Value;
+
+        if (nic.OperationalStatus != OperationalStatus.Up || bssid == null)
+            return new WifiSnapshot(adapter, "Disconnected", "Not connected", "-", "-", "-", "-", null, null);
+
+        string standard = radio switch
+        {
+            "802.11be" => "Wi-Fi 7 (802.11be)",
+            "802.11ax" => "Wi-Fi 6 (802.11ax)",
+            "802.11ac" => "Wi-Fi 5 (802.11ac)",
+            "802.11n" => "Wi-Fi 4 (802.11n)",
+            _ => "802.11a/b/g"
+        };
+        int? percent = int.TryParse(signalText?.TrimEnd('%', ' '), out int p) ? Math.Clamp(p, 0, 100) : null;
+
+        string ipv4 = "-", ipv6 = "-", mask = "-";
+        string? gateway = null, dhcp = null;
+        var dns = new List<string>();
+        long? sent = null, received = null;
+        try
+        {
+            var ip = nic.GetIPProperties();
+            foreach (var ua in ip.UnicastAddresses)
+            {
+                if (ua.Address.AddressFamily == AddressFamily.InterNetwork && ipv4 == "-")
+                {
+                    ipv4 = ua.Address.ToString();
+                    mask = ua.IPv4Mask?.ToString() ?? "-";
+                }
+                else if (ua.Address.AddressFamily == AddressFamily.InterNetworkV6 && ipv6 == "-"
+                         && !ua.Address.IsIPv6LinkLocal)
+                {
+                    ipv6 = ua.Address.ToString();
+                }
+            }
+            gateway = ip.GatewayAddresses.FirstOrDefault(g => g.Address.ToString() != "0.0.0.0")?.Address.ToString();
+            dhcp = ip.DhcpServerAddresses.FirstOrDefault()?.ToString();
+            dns = ip.DnsAddresses.Select(a => a.ToString()).Take(2).ToList();
+
+            var stats = nic.GetIPv4Statistics();
+            sent = stats.BytesSent;
+            received = stats.BytesReceived;
+        }
+        catch { }
+
+        return new WifiSnapshot(adapter, "Connected", ssid ?? "Connected",
+            string.Join(" ", new[] { "802.11", standard, band }.Where(s => !string.IsNullOrEmpty(s))),
+            percent is int sp ? $"📶 {sp}%" : "-", ipv4, ipv6, sent, received)
+        {
+            WifiStandard = standard,
+            SignalPercentText = percent is int q ? $"{q}%" : null,
+            Bssid = bssid,
+            Gateway = gateway,
+            Dns1 = dns.ElementAtOrDefault(0),
+            Dns2 = dns.ElementAtOrDefault(1),
+            Netmask = mask,
+            DhcpServer = dhcp,
+            DownloadText = received is long rx ? $"{rx / 1048576.0:F1} MB since boot" : null,
+            UploadText = sent is long tx ? $"{tx / 1048576.0:F1} MB since boot" : null
+        };
     }
 }
 
