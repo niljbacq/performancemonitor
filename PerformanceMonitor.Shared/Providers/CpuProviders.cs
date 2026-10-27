@@ -154,8 +154,11 @@ public sealed class WindowsCpuProvider : CpuProviderBase
                 s.Cores = obj["NumberOfCores"]?.ToString();
                 s.LogicalProcessors = obj["NumberOfLogicalProcessors"]?.ToString();
 
-                if (uint.TryParse(obj["L2CacheSize"]?.ToString(), out uint l2)) s.L2Cache = FormatKb(l2);
-                if (uint.TryParse(obj["L3CacheSize"]?.ToString(), out uint l3)) s.L3Cache = FormatKb(l3);
+                // A CPU without L3 reports 0, not null; "0 KB" would be a row.
+                if (uint.TryParse(obj["L2CacheSize"]?.ToString(), out uint l2) && l2 > 0)
+                    s.L2Cache = FormatKb(l2);
+                if (uint.TryParse(obj["L3CacheSize"]?.ToString(), out uint l3) && l3 > 0)
+                    s.L3Cache = FormatKb(l3);
 
                 if (obj["VirtualizationFirmwareEnabled"] is bool v)
                     s.Virtualization = v ? "Enabled" : "Disabled";

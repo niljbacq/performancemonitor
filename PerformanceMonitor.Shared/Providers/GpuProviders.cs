@@ -242,9 +242,11 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         return 0;
     }
 
-    // Match a WMI PNPDeviceID against a display-class MatchingDeviceId prefix
-    // (e.g. "PCI\VEN_1002&DEV_130F&SUBSYS_..." matches the longer PNPDeviceID).
-    private static long? MatchTotalBytes(Dictionary<string, long> totals, string? pnp)
+    // Match a WMI PNPDeviceID against a display-class MatchingDeviceId. The class
+    // key stores "PCI\VEN_1002&DEV_130F&REV_D4" while WMI reports
+    // "PCI\VEN_1002&DEV_130F&SUBSYS_..&REV_D4\..", which diverges at SUBSYS, so
+    // after the exact-prefix check fall back to the vendor+device prefix.
+    public static long? MatchTotalBytes(Dictionary<string, long> totals, string? pnp)
     {
         if (string.IsNullOrEmpty(pnp) || totals.Count == 0) return null;
         string norm = pnp.ToUpperInvariant();
@@ -254,7 +256,20 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
             if (norm.StartsWith(m, StringComparison.Ordinal) || m.StartsWith(norm, StringComparison.Ordinal))
                 return kv.Value;
         }
+
+        string key = VendorDeviceKey(norm);
+        if (key.Length == 0) return null;
+        foreach (var kv in totals)
+        {
+            if (VendorDeviceKey(kv.Key.ToUpperInvariant()) == key) return kv.Value;
+        }
         return null;
+    }
+
+    private static string VendorDeviceKey(string id)
+    {
+        int dev = id.IndexOf("&DEV_", StringComparison.Ordinal);
+        return dev > 0 && dev + 9 <= id.Length ? id[..(dev + 9)] : "";
     }
 
     private static string? VendorFromName(string name)
