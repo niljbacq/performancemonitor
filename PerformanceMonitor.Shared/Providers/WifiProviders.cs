@@ -99,6 +99,12 @@ public sealed class WindowsWifiProvider : IWifiProvider
         if (nic == null)
             return new WifiSnapshot(adapter, "Disconnected", "No wireless adapter", "-", "-", "-", "-", null, null);
 
+        // WlanAPI first; netsh stays as the fallback for a stopped WLAN
+        // service or an adapter that reports no association.
+        var wlan = WlanApi.Query();
+        if (wlan is { Connected: true } w)
+            return BuildFromWlan(nic, adapter, w);
+
         var parsed = ReadNetsh(nic.Name, nic.GetPhysicalAddress().ToString());
 
         string? bssid = parsed.Bssid;
@@ -110,16 +116,54 @@ public sealed class WindowsWifiProvider : IWifiProvider
         if (nic.OperationalStatus != OperationalStatus.Up || bssid == null)
             return new WifiSnapshot(adapter, "Disconnected", "Not connected", "-", "-", "-", "-", null, null);
 
-        string standard = radio switch
-        {
-            "802.11be" => "Wi-Fi 7 (802.11be)",
-            "802.11ax" => "Wi-Fi 6 (802.11ax)",
-            "802.11ac" => "Wi-Fi 5 (802.11ac)",
-            "802.11n" => "Wi-Fi 4 (802.11n)",
-            _ => "802.11a/b/g"
-        };
+        string standard = WifiText.StandardFromPhy(radio);
         int? percent = int.TryParse(signalText?.TrimEnd('%', ' '), out int p) ? Math.Clamp(p, 0, 100) : null;
 
+        var net = ReadNetwork(nic);
+        return new WifiSnapshot(adapter, "Connected", ssid ?? "Connected",
+            string.Join(" ", new[] { "802.11", standard, band }.Where(s => !string.IsNullOrEmpty(s))),
+            percent is int sp ? $"📶 {sp}%" : "-", net.Ipv4, net.Ipv6, net.Sent, net.Received)
+        {
+            WifiStandard = standard,
+            SignalPercentText = percent is int q ? $"{q}%" : null,
+            Bssid = bssid,
+            Gateway = net.Gateway,
+            Dns1 = net.Dns.ElementAtOrDefault(0),
+            Dns2 = net.Dns.ElementAtOrDefault(1),
+            Netmask = net.Mask,
+            DhcpServer = net.Dhcp,
+            DownloadText = net.Received is long rx ? $"{rx / 1048576.0:F1} MB since boot" : null,
+            UploadText = net.Sent is long tx ? $"{tx / 1048576.0:F1} MB since boot" : null
+        };
+    }
+
+    private static WifiSnapshot BuildFromWlan(NetworkInterface nic, string adapter, WlanState wlan)
+    {
+        string standard = wlan.Phy ?? "802.11a/b/g";
+        string? signal = wlan.RssiDbm is int dbm ? $"📶 {dbm} dBm" : null;
+        int? percent = wlan.RssiDbm is int r ? WifiText.PercentFromRssi(r) : null;
+
+        var net = ReadNetwork(nic);
+        return new WifiSnapshot(adapter, "Connected", wlan.Ssid ?? "Connected",
+            string.Join(" ", new[] { "802.11", standard, wlan.Band }.Where(s => !string.IsNullOrEmpty(s))),
+            signal ?? "-", net.Ipv4, net.Ipv6, net.Sent, net.Received)
+        {
+            WifiStandard = standard,
+            SignalPercentText = percent is int q ? $"{q}%" : null,
+            Bssid = wlan.Bssid,
+            Gateway = net.Gateway,
+            Dns1 = net.Dns.ElementAtOrDefault(0),
+            Dns2 = net.Dns.ElementAtOrDefault(1),
+            Netmask = net.Mask,
+            DhcpServer = net.Dhcp,
+            DownloadText = net.Received is long rx ? $"{rx / 1048576.0:F1} MB since boot" : null,
+            UploadText = net.Sent is long tx ? $"{tx / 1048576.0:F1} MB since boot" : null
+        };
+    }
+
+    private static (string Ipv4, string Ipv6, long? Sent, long? Received,
+        string? Gateway, string? Dhcp, List<string> Dns, string Mask) ReadNetwork(NetworkInterface nic)
+    {
         string ipv4 = "-", ipv6 = "-", mask = "-";
         string? gateway = null, dhcp = null;
         var dns = new List<string>();
@@ -144,27 +188,14 @@ public sealed class WindowsWifiProvider : IWifiProvider
             dhcp = ip.DhcpServerAddresses.FirstOrDefault()?.ToString();
             dns = ip.DnsAddresses.Select(a => a.ToString()).Take(2).ToList();
 
-            var stats = nic.GetIPv4Statistics();
+            // GetIPStatistics counts IPv4 and IPv6 together (GetIfEntry2).
+            var stats = nic.GetIPStatistics();
             sent = stats.BytesSent;
             received = stats.BytesReceived;
         }
         catch { }
 
-        return new WifiSnapshot(adapter, "Connected", ssid ?? "Connected",
-            string.Join(" ", new[] { "802.11", standard, band }.Where(s => !string.IsNullOrEmpty(s))),
-            percent is int sp ? $"📶 {sp}%" : "-", ipv4, ipv6, sent, received)
-        {
-            WifiStandard = standard,
-            SignalPercentText = percent is int q ? $"{q}%" : null,
-            Bssid = bssid,
-            Gateway = gateway,
-            Dns1 = dns.ElementAtOrDefault(0),
-            Dns2 = dns.ElementAtOrDefault(1),
-            Netmask = mask,
-            DhcpServer = dhcp,
-            DownloadText = received is long rx ? $"{rx / 1048576.0:F1} MB since boot" : null,
-            UploadText = sent is long tx ? $"{tx / 1048576.0:F1} MB since boot" : null
-        };
+        return (ipv4, ipv6, sent, received, gateway, dhcp, dns, mask);
     }
 }
 
