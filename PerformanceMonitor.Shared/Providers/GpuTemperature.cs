@@ -161,3 +161,12 @@ public static class GpuTemperature
         public byte PowerStateOverride;
     }
 }
+
+// Mirrors the Linux reason row when an adapter exposes no utilization counter.
+public static class GpuReason
+{
+    public static string ForUtilization(string? driverName) =>
+        string.IsNullOrWhiteSpace(driverName)
+            ? "Utilization not exposed by this GPU driver"
+            : $"Utilization not exposed by the {driverName} driver";
+}

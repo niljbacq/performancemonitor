@@ -139,6 +139,7 @@ public sealed class GpuInfo
     public string? Kind { get; set; }
     public string? DriverVersion { get; set; }
     public string? DriverDate { get; set; }
+    public string? DriverName { get; set; }
     public string? GraphicsApi { get; set; }
     public string? PhysicalLocation { get; set; }
     public string? Vendor { get; set; }

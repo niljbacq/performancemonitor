@@ -73,6 +73,13 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
                 result[i].TemperatureC = t;
         }
 
+        // Linux shows why there is no utilization; match that instead of "-".
+        foreach (var g in result)
+        {
+            if (g.Utilization == null && g.UtilizationText == null)
+                g.UtilizationText = GpuReason.ForUtilization(g.DriverName);
+        }
+
         return result;
     }
 
@@ -100,6 +107,7 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
                 };
                 if (DateTime.TryParse(obj["DriverDate"]?.ToString(), out var date))
                     info.DriverDate = date.ToShortDateString();
+                info.DriverName = ReadDriverService(pnp);
                 list.Add(info);
             }
         }
@@ -120,6 +128,22 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         // Enrich NVIDIA specs (name, driver, PCI bus) without live values.
         NvidiaSmi.Apply(list, NvidiaSmi.Query(), includeLive: false);
         return list;
+    }
+
+    // Kernel miniport service name ("amdkmdag", "igdkmd64", "nvlddmkm") from the
+    // device's enum key; the WMI InstalledDisplayDrivers value holds DLL paths.
+    private static string? ReadDriverService(string? pnpDeviceId)
+    {
+        if (string.IsNullOrEmpty(pnpDeviceId)) return null;
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\" + pnpDeviceId);
+            return key?.GetValue("Service") as string;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // WMI formatted GPU perf classes keep English names on non-English Windows
@@ -522,6 +546,7 @@ internal static class GpuMap
         Kind = src.Kind,
         DriverVersion = src.DriverVersion,
         DriverDate = src.DriverDate,
+        DriverName = src.DriverName,
         GraphicsApi = src.GraphicsApi,
         PhysicalLocation = src.PhysicalLocation,
         Vendor = src.Vendor,
