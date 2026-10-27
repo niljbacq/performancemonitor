@@ -59,44 +59,12 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         NvidiaSmi.Apply(result, rows, includeLive: true);
 
         // Non-NVIDIA (or when nvidia-smi is missing): GPU Engine 3D counters,
-        // summed per phys_N adapter and assigned in phys order (best effort;
-        // Windows does not expose a reliable WMI-to-phys mapping).
-        var byPhys = SamplePerfByPhys();
-        int physIdx = 0;
-        foreach (var g in result)
-        {
-            if (g.Utilization != null) continue;
-            if (physIdx >= byPhys.Count) break;
-            g.Utilization = byPhys[physIdx];
-            physIdx++;
-        }
-
-        // GPU memory for any vendor, without DXGI: the "GPU Adapter Memory"
-        // counters give Dedicated/Shared Usage in bytes per adapter. Total VRAM
-        // comes from the registry (qwMemorySize), which is not capped at 4 GB.
-        var memByPhys = SampleAdapterMemoryByPhys();
-        int memIdx = 0;
-        foreach (var g in result)
-        {
-            if (g.MemoryUsage != null) continue;
-            if (memIdx >= memByPhys.Count) break;
-            var (dedicated, shared) = memByPhys.ElementAt(memIdx).Value;
-            if (dedicated > 0 || shared > 0 || g.TotalMemoryBytes != null)
-            {
-                string used = Bytes(dedicated);
-                g.MemoryUsage = g.TotalMemoryBytes is long total ? $"{used} / {Bytes(total)}" : used;
-                if (shared > 0) g.SharedMemoryUsage = Bytes(shared);
-            }
-            memIdx++;
-        }
+        // summed per phys_N adapter. Values are keyed by adapter index, so an
+        // adapter that already has a value cannot shift the ones after it.
+        GpuAssign.ApplyByIndex(result, SamplePerfByPhys(), SampleAdapterMemoryByPhys());
 
         return result;
     }
-
-    private static string Bytes(long b) =>
-        b >= 1024L * 1024 * 1024 ? $"{b / (1024.0 * 1024 * 1024):F2} GB"
-        : b >= 1024L * 1024 ? $"{b / (1024.0 * 1024):F0} MB"
-        : $"{b / 1024.0:F0} KB";
 
     private List<GpuInfo> BuildList()
     {
@@ -146,7 +114,7 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
 
     // WMI formatted GPU perf classes keep English names on non-English Windows
     // (the "GPU Engine" / "GPU Adapter Memory" PerformanceCounter categories do not).
-    private IReadOnlyList<float> SamplePerfByPhys()
+    private SortedDictionary<int, float> SamplePerfByPhys()
     {
         var byPhys = new SortedDictionary<int, float>();
         try
@@ -170,7 +138,7 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
 
         foreach (int key in byPhys.Keys.ToList())
             byPhys[key] = (float)Math.Min(Math.Round(byPhys[key], 1), 100);
-        return byPhys.Values.ToList();
+        return byPhys;
     }
 
     private static int? PhysIndex(string instance)
@@ -564,6 +532,35 @@ internal static class GpuMap
         }
         return list.Count > 0 ? list[0] : null;
     }
+}
+
+// Assigns per-adapter counters by adapter index. A running counter (the old
+// behaviour) shifted every later adapter whenever an earlier one was skipped.
+public static class GpuAssign
+{
+    public static void ApplyByIndex(IReadOnlyList<GpuInfo> gpus,
+        SortedDictionary<int, float> utilization,
+        SortedDictionary<int, (long Dedicated, long Shared)> memory)
+    {
+        for (int i = 0; i < gpus.Count; i++)
+        {
+            var g = gpus[i];
+            if (g.Utilization == null && utilization.TryGetValue(i, out float u))
+                g.Utilization = u;
+
+            if (g.MemoryUsage != null || !memory.TryGetValue(i, out var m)) continue;
+            if (m.Dedicated <= 0 && m.Shared <= 0 && g.TotalMemoryBytes == null) continue;
+
+            string used = Bytes(m.Dedicated);
+            g.MemoryUsage = g.TotalMemoryBytes is long total ? $"{used} / {Bytes(total)}" : used;
+            if (m.Shared > 0) g.SharedMemoryUsage = Bytes(m.Shared);
+        }
+    }
+
+    public static string Bytes(long b) =>
+        b >= 1024L * 1024 * 1024 ? $"{b / (1024.0 * 1024 * 1024):F2} GB"
+        : b >= 1024L * 1024 ? $"{b / (1024.0 * 1024):F0} MB"
+        : $"{b / 1024.0:F0} KB";
 }
 
 public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider
