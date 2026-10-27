@@ -25,7 +25,11 @@ public static class GpuTemperature
     [DllImport("gdi32.dll")]
     private static extern int D3DKMTCloseAdapter(ref D3DKMT_CLOSEADAPTER close);
 
-    /// <summary>One entry per adapter in enumeration order; null = no reading.</summary>
+    /// <summary>
+    /// One entry per adapter that drives a display, in enumeration order;
+    /// null = no reading. Render-only adapters are skipped: mixing them in
+    /// would shift the WMI adapter list against these entries.
+    /// </summary>
     public static IReadOnlyList<double?> ReadAll()
     {
         var temps = new List<double?>();
@@ -48,6 +52,7 @@ public static class GpuTemperature
                 for (int i = 0; i < count; i++)
                 {
                     var info = Marshal.PtrToStructure<D3DKMT_ADAPTERINFO>(IntPtr.Add(buffer, i * size));
+                    if (info.NumOfSources == 0) continue;
                     temps.Add(ReadOne(info.AdapterLuid));
                 }
             }
@@ -63,7 +68,8 @@ public static class GpuTemperature
         return temps;
     }
 
-    private static double? ReadOne(Luid luid)    {
+    private static double? ReadOne(Luid luid)
+    {
         var open = new D3DKMT_OPENADAPTERFROMLUID { AdapterLuid = luid };
         if (D3DKMTOpenAdapterFromLuid(ref open) != 0) return null;
 

@@ -85,7 +85,7 @@ internal static class WlanApi
 
             if (WlanQueryInterface(handle, ref guid, OpcodeCurrentConnection, IntPtr.Zero,
                     out _, out IntPtr data, out _) != 0 || data == IntPtr.Zero)
-                return new WlanState(name, false, null, null, null, null, null);
+                return null; // query failed: let the caller fall back to netsh
             try
             {
                 var attrs = Marshal.PtrToStructure<WlanConnectionAttributes>(data);
@@ -152,12 +152,13 @@ internal static class WlanApi
         _ => null
     };
 
+    // DOT11_PHY_TYPE: 7 = ht (11n), 8 = vht (11ac), 10 = he (11ax), 11 = eht (11be).
     private static string? PhyText(uint phyType) => phyType switch
     {
-        12 => "802.11be",
-        11 => "802.11ax",
-        9 => "802.11ac",
-        8 => "802.11n",
+        11 => "802.11be",
+        10 => "802.11ax",
+        8 => "802.11ac",
+        7 => "802.11n",
         _ => null
     };
 
@@ -214,12 +215,15 @@ internal static class WlanApi
         public uint CipherAlgorithm;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WlanConnectionAttributes
     {
         public uint State;
         public uint ConnectionMode;
-        public IntPtr ProfileName;
+        // Inline WCHAR[256] in the SDK, not a pointer: it is what puts the
+        // association at offset 520 (struct size 604).
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string ProfileName;
         public WlanAssociationAttributes Association;
         public WlanSecurityAttributes Security;
     }
@@ -235,18 +239,22 @@ internal static class WlanApi
     [StructLayout(LayoutKind.Sequential)]
     private struct WlanBssEntry
     {
-        public Dot11Ssid Ssid;
-        public uint PhyId;
+        public Dot11Ssid Ssid;                        // 0
+        public uint PhyId;                            // 36
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)]
-        public byte[] Bssid;
-        public uint BssType;
-        public uint PhyType;
-        public uint PhyIndex;
-        public uint SignalQuality;
-        public int Rssi;
-        public uint CenterFrequency;
-        public WlanRateSet RateSet;
-        public uint IeOffset;
-        public uint IeSize;
+        public byte[] Bssid;                          // 40
+        public uint BssType;                          // 48
+        public uint PhyType;                          // 52
+        public int Rssi;                              // 56
+        public uint LinkQuality;                      // 60
+        public byte InRegDomain;                      // 64
+        public ushort BeaconPeriod;                   // 66
+        public ulong Timestamp;                       // 72
+        public ulong HostTimestamp;                   // 80
+        public ushort CapabilityInformation;          // 88
+        public uint CenterFrequency;                  // 92
+        public WlanRateSet RateSet;                   // 96
+        public uint IeOffset;                         // 352
+        public uint IeSize;                           // 356, struct 360
     }
 }

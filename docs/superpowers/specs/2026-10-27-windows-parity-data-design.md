@@ -72,16 +72,22 @@ overlay CPU/memory/GPU rows.
 Machine: Windows 10 19045, AMD A10-7870K (Radeon R7 iGPU), 16 GB RAM (7 GB usable),
 no wireless adapter, no NVIDIA GPU.
 
-- **Wi-Fi** — no adapter and `wlansvc` stopped, so only the none/fallback path was
-  exercised: `GetSnapshot()` returns `Disconnected | No wireless adapter`,
-  `WlanApi.Query()` returns null. Marshal sizes asserted against the SDK:
-  `WlanInterfaceInfo` 532, `WlanBssEntry` 336, `WlanConnectionAttributes` 104.
-  The connected path (SSID/BSSID/dBm/band from WlanAPI) is **unverified**; it needs a
-  machine with a wireless adapter.
+- **Wi-Fi** — no adapter and `wlansvc` stopped, so the connected path could not be
+  exercised here. What *is* proven: the marshalling layouts, asserted against the
+  provider's own types — `WlanInterfaceInfo` 532, `WlanConnectionAttributes` 604 with
+  `Association` at 520 (the SDK has an inline `WCHAR[256]` profile name), `WlanBssEntry`
+  360 with `Rssi` at 56 and `CenterFrequency` at 92 — and the `DOT11_PHY_TYPE` mapping
+  (7 → 11n, 8 → 11ac, 10 → 11ax, 11 → 11be). Behaviour here: `GetSnapshot()` returns
+  `Disconnected | No wireless adapter`, `WlanApi.Query()` returns null, and the netsh
+  fallback is reached only when the API cannot answer at all. **Not verified:** a live
+  association (SSID/BSSID/dBm/band from a real AP); that needs a machine with a
+  wireless adapter.
 - **GPU temperature** — `D3DKMTQueryAdapterInfo` type **62** (`KMTQAITYPE_ADAPTERPERFDATA`)
   returns `STATUS_SUCCESS`; `Temperature` is tenths of °C at offset 56. Types 61, 63, 64
-  and the plan's guessed 45 all return `0xC000000D`. Live: adapter 0 (Radeon R7) 49–64 °C;
-  adapter 1 (Microsoft Basic Render) unsupported → null → row hidden.
+  and the plan's guessed 45 all return `0xC000000D`. Live: adapter 0 (Radeon R7) 47–64 °C.
+  Render-only adapters (`NumOfSources == 0`, e.g. Microsoft Basic Render) are skipped, and
+  the values are applied only when the display-adapter count equals the WMI row count —
+  otherwise the rows stay hidden rather than showing another card's reading.
   `Sample().TemperatureC` carries the value the overlay already binds.
 - **GPU counters** — one adapter sampled at `util = 5–26%`, `mem ≈ 626–693 MB`; row count
   equals the adapter list. Multi-GPU index ordering unverified (only one real adapter).

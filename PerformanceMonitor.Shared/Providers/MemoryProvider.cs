@@ -87,7 +87,9 @@ public sealed class HardwareInfoMemoryProvider : IMemoryProvider
             uint size = (uint)Marshal.SizeOf<PERFORMANCE_INFORMATION>();
             perf = new PERFORMANCE_INFORMATION { cb = size };
             if (!GetPerformanceInfo(out perf, size)) { perf = default; return false; }
-            if (perf.PageSize == 0) return false;
+            // PageSize 0 or an all-zero counter set means the counters did not
+            // answer; the rows would read "0.0 GB", which is worse than hidden.
+            if (perf.PageSize == 0 || perf.CommitTotal == 0) return false;
 
             total = status.ullTotalPhys;
             available = status.ullAvailPhys;

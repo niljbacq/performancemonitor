@@ -99,11 +99,14 @@ public sealed class WindowsWifiProvider : IWifiProvider
         if (nic == null)
             return new WifiSnapshot(adapter, "Disconnected", "No wireless adapter", "-", "-", "-", "-", null, null);
 
-        // WlanAPI first; netsh stays as the fallback for a stopped WLAN
-        // service or an adapter that reports no association.
+        // WlanAPI first; netsh stays as the fallback only when the API itself
+        // cannot answer (stopped WLAN service, no handle), never as a second
+        // opinion on a connection state it already reported.
         var wlan = WlanApi.Query();
         if (wlan is { Connected: true } w)
             return BuildFromWlan(nic, adapter, w);
+        if (wlan is not null)
+            return new WifiSnapshot(adapter, "Disconnected", "Not connected", "-", "-", "-", "-", null, null);
 
         var parsed = ReadNetsh(nic.Name, nic.GetPhysicalAddress().ToString());
 
@@ -139,7 +142,7 @@ public sealed class WindowsWifiProvider : IWifiProvider
 
     private static WifiSnapshot BuildFromWlan(NetworkInterface nic, string adapter, WlanState wlan)
     {
-        string standard = wlan.Phy ?? "802.11a/b/g";
+        string standard = WifiText.StandardFromPhy(wlan.Phy);
         string? signal = wlan.RssiDbm is int dbm ? $"📶 {dbm} dBm" : null;
         int? percent = wlan.RssiDbm is int r ? WifiText.PercentFromRssi(r) : null;
 

@@ -65,13 +65,7 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
 
         // Temperature straight from the WDDM driver for adapters nvidia-smi
         // did not fill; null when the driver does not answer.
-        var temps = GpuTemperature.ReadAll();
-        for (int i = 0; i < result.Count && i < temps.Count; i++)
-        {
-            if (result[i].TemperatureC == null && result[i].TemperatureText == null
-                && temps[i] is double t)
-                result[i].TemperatureC = t;
-        }
+        GpuAssign.ApplyTemperatures(result, GpuTemperature.ReadAll());
 
         // Linux shows why there is no utilization; match that instead of "-".
         foreach (var g in result)
@@ -589,6 +583,20 @@ public static class GpuAssign
             string used = Bytes(m.Dedicated);
             g.MemoryUsage = g.TotalMemoryBytes is long total ? $"{used} / {Bytes(total)}" : used;
             if (m.Shared > 0) g.SharedMemoryUsage = Bytes(m.Shared);
+        }
+    }
+
+    public static void ApplyTemperatures(IReadOnlyList<GpuInfo> gpus, IReadOnlyList<double?> temps)
+    {
+        // A shifted list would show one card's temperature on another, so a
+        // length mismatch applies nothing and the rows stay hidden.
+        if (temps.Count != gpus.Count) return;
+
+        for (int i = 0; i < gpus.Count; i++)
+        {
+            if (gpus[i].TemperatureC == null && gpus[i].TemperatureText == null
+                && temps[i] is double t)
+                gpus[i].TemperatureC = t;
         }
     }
 
