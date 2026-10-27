@@ -13,52 +13,80 @@ namespace TaskManager.Providers;
 [SupportedOSPlatform("windows")]
 public sealed class WindowsWifiProvider : IWifiProvider
 {
+    private DateTime _netshAt;
+    private string? _netshAdapter;
+    private (string? Ssid, string? Bssid, string? SignalPercent, string? Radio, string? Band) _netsh;
+
     public WifiDetails GetDetails(string interfaceName)
     {
-        var pairs = ReadNetshPairs();
-
-        int bssidIndex = pairs.FindIndex(p =>
-            Regex.IsMatch(p.Value, @"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
-
-        string? ssid = null;
-        if (bssidIndex > 0)
-        {
-            string candidate = pairs[bssidIndex - 1].Value;
-            if (candidate.Length > 0) ssid = candidate;
-        }
-
-        string? signal = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^\d{1,3}\s*%$")).Value;
-        string? radio = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^802\.11")).Value;
-
-        NetworkInterface? nic = NetworkInterface.GetAllNetworkInterfaces()
-            .FirstOrDefault(n => n.Name == interfaceName);
-        bool connected = bssidIndex >= 0
-                         || (nic?.OperationalStatus == OperationalStatus.Up && ssid != null);
-
-        if (!connected)
-            return new WifiDetails("Disconnected", "Not connected", radio ?? "-", "-");
-
-        return new WifiDetails(
-            "Connected",
-            ssid ?? "Connected",
-            radio ?? "-",
-            signal != null ? $"📶 {signal}" : "-");
+        // Windows uses GetSnapshot; projecting keeps one parsing path.
+        var snap = GetSnapshot();
+        return snap == null
+            ? new WifiDetails("Disconnected", "Not connected", "-", "-")
+            : new WifiDetails(snap.Status, snap.Ssid, snap.ConnectionType, snap.SignalStrength);
     }
 
-    // netsh labels are localized, but the values are not. Pair every
-    // "label: value" line and identify fields by their value shape.
-    private static List<(string Label, string Value)> ReadNetshPairs()
+    // netsh spawn costs ~80-120 ms here; the view model samples every 2 s,
+    // so cache the parsed fields for 5 s.
+    private (string? Ssid, string? Bssid, string? SignalPercent, string? Radio, string? Band)
+        ReadNetsh(string adapterName, string ownMac)
     {
+        if (_netshAdapter == adapterName && DateTime.UtcNow - _netshAt < TimeSpan.FromSeconds(5))
+            return _netsh;
+
         string output = CommandRunner.Run("netsh", "wlan show interfaces", 2000);
-        var pairs = new List<(string Label, string Value)>();
+        _netsh = ParseInterface(output, adapterName, ownMac);
+        _netshAdapter = adapterName;
+        _netshAt = DateTime.UtcNow;
+        return _netsh;
+    }
+
+    // Labels are localized, but the values are not, so every field is found
+    // by the shape of its value.
+    private static (string? Ssid, string? Bssid, string? SignalPercent, string? Radio, string? Band)
+        ParseInterface(string output, string adapterName, string ownMac)
+    {
+        // netsh prints one block per adapter, blank-line separated. Pick the
+        // block for this NIC by its Name value; fall back to the first block.
+        var blocks = new List<List<(string Label, string Value)>>();
+        var current = new List<(string Label, string Value)>();
         foreach (string line in output.Split('\n'))
         {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                if (current.Count > 0) blocks.Add(current);
+                current = new List<(string Label, string Value)>();
+                continue;
+            }
             int colon = line.IndexOf(':');
             if (colon <= 0) continue;
-            pairs.Add((line[..colon].Trim(), line[(colon + 1)..].Trim()));
+            current.Add((line[..colon].Trim(), line[(colon + 1)..].Trim()));
         }
-        return pairs;
+        if (current.Count > 0) blocks.Add(current);
+
+        var pairs = blocks.FirstOrDefault(b =>
+                        b.Any(p => string.Equals(p.Value, adapterName, StringComparison.OrdinalIgnoreCase)))
+                    ?? blocks.FirstOrDefault()
+                    ?? new List<(string Label, string Value)>();
+
+        // The adapter's own MAC is also MAC-shaped and comes first; skip it so
+        // the next one is the AP's BSSID and the line above it is the SSID.
+        string own = NormalizeMac(ownMac);
+        int bssidIndex = pairs.FindIndex(p => IsMac(p.Value) && NormalizeMac(p.Value) != own);
+        string? bssid = bssidIndex >= 0 ? pairs[bssidIndex].Value : null;
+        string? ssid = bssidIndex > 0 ? pairs[bssidIndex - 1].Value : null;
+        string? signal = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^\d{1,3}\s*%$")).Value;
+        string? radio = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^802\.11")).Value;
+        string? band = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^(2\.4|5|6)\s*GHz$")).Value;
+
+        return (ssid, bssid, signal, radio, band);
     }
+
+    private static bool IsMac(string value) =>
+        Regex.IsMatch(value, @"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$");
+
+    private static string NormalizeMac(string value) =>
+        value.Replace(":", "").Replace("-", "").ToUpperInvariant();
 
     public WifiSnapshot? GetSnapshot()
     {
@@ -71,15 +99,13 @@ public sealed class WindowsWifiProvider : IWifiProvider
         if (nic == null)
             return new WifiSnapshot(adapter, "Disconnected", "No wireless adapter", "-", "-", "-", "-", null, null);
 
-        var pairs = ReadNetshPairs();
+        var parsed = ReadNetsh(nic.Name, nic.GetPhysicalAddress().ToString());
 
-        // Labels are localized; values are not. Identify each field by value shape.
-        int bssidIndex = pairs.FindIndex(p => Regex.IsMatch(p.Value, @"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
-        string? bssid = bssidIndex >= 0 ? pairs[bssidIndex].Value : null;
-        string? ssid = bssidIndex > 0 ? pairs[bssidIndex - 1].Value : null;
-        string? signalText = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^\d{1,3}\s*%$")).Value;
-        string? radio = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^802\.11")).Value;
-        string? band = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^(2\.4|5|6)\s*GHz$")).Value;
+        string? bssid = parsed.Bssid;
+        string? ssid = parsed.Ssid;
+        string? signalText = parsed.SignalPercent;
+        string? radio = parsed.Radio;
+        string? band = parsed.Band;
 
         if (nic.OperationalStatus != OperationalStatus.Up || bssid == null)
             return new WifiSnapshot(adapter, "Disconnected", "Not connected", "-", "-", "-", "-", null, null);
