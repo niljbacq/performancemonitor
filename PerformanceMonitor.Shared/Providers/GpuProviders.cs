@@ -63,6 +63,16 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         // adapter that already has a value cannot shift the ones after it.
         GpuAssign.ApplyByIndex(result, SamplePerfByPhys(), SampleAdapterMemoryByPhys());
 
+        // Temperature straight from the WDDM driver for adapters nvidia-smi
+        // did not fill; null when the driver does not answer.
+        var temps = GpuTemperature.ReadAll();
+        for (int i = 0; i < result.Count && i < temps.Count; i++)
+        {
+            if (result[i].TemperatureC == null && result[i].TemperatureText == null
+                && temps[i] is double t)
+                result[i].TemperatureC = t;
+        }
+
         return result;
     }
 
