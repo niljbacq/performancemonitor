@@ -100,6 +100,7 @@ public interface ICpuProvider
     string? ProcessStatsUnavailableMessage => null;
 
     string? PerCoreFrequencyText => null;
+    string? CurrentSpeedText => null;
     string? FrequencyResidencyText => null;
     string? AppUsageText => null;
 }

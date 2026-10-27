@@ -48,6 +48,8 @@ public sealed class WindowsCpuProvider : CpuProviderBase
     // the localised "_Total" instance name.
     private readonly ManagementObjectSearcher? _usageSearcher;
     private bool _usageFailed;
+    private DateTime _speedSampleAt;
+    private string? _speedText;
 
     public WindowsCpuProvider()
     {
@@ -67,6 +69,34 @@ public sealed class WindowsCpuProvider : CpuProviderBase
 
     public string? UsageUnavailableMessage =>
         _usageFailed ? "CPU utilization unavailable (WMI performance data)" : null;
+
+    public string? CurrentSpeedText
+    {
+        get
+        {
+            if (DateTime.UtcNow - _speedSampleAt < TimeSpan.FromSeconds(2)) return _speedText;
+            _speedSampleAt = DateTime.UtcNow;
+            try
+            {
+                // Average the per-core rows; aggregate rows start with "_".
+                using var searcher = new ManagementObjectSearcher(
+                    "SELECT Name, ProcessorFrequency FROM Win32_PerfFormattedData_Counters_ProcessorInformation");
+                double sum = 0;
+                int count = 0;
+                foreach (var obj in searcher.Get())
+                {
+                    string name = obj["Name"]?.ToString() ?? "";
+                    if (name.StartsWith("_", StringComparison.Ordinal)) continue;
+                    if (!double.TryParse(obj["ProcessorFrequency"]?.ToString(), out double mhz) || mhz <= 0) continue;
+                    sum += mhz;
+                    count++;
+                }
+                if (count > 0) _speedText = $"{Math.Round(sum / count / 1000.0, 2):F2} GHz";
+            }
+            catch { }
+            return _speedText;
+        }
+    }
 
     public override float GetUsagePercent()
     {
@@ -118,7 +148,7 @@ public sealed class WindowsCpuProvider : CpuProviderBase
                 if (uint.TryParse(obj["MaxClockSpeed"]?.ToString(), out uint maxClock))
                 {
                     s.BaseSpeed = $"{Math.Round(maxClock / 1000.0, 2):F2} GHz";
-                    s.Speed = s.BaseSpeed;
+                    s.Speed = CurrentSpeedText ?? s.BaseSpeed;
                 }
 
                 s.Cores = obj["NumberOfCores"]?.ToString();
