@@ -66,3 +66,35 @@ overlay CPU/memory/GPU rows.
 - Scratch console app (`%TEMP%\opencode\paritycheck`) drives provider APIs and asserts.
 - Published exe: no console window, no `conhost.exe` child, overlay shows GPU temperature
   when the driver answers.
+
+## Verification results
+
+Machine: Windows 10 19045, AMD A10-7870K (Radeon R7 iGPU), 16 GB RAM (7 GB usable),
+no wireless adapter, no NVIDIA GPU.
+
+- **Wi-Fi** — no adapter and `wlansvc` stopped, so only the none/fallback path was
+  exercised: `GetSnapshot()` returns `Disconnected | No wireless adapter`,
+  `WlanApi.Query()` returns null. Marshal sizes asserted against the SDK:
+  `WlanInterfaceInfo` 532, `WlanBssEntry` 336, `WlanConnectionAttributes` 104.
+  The connected path (SSID/BSSID/dBm/band from WlanAPI) is **unverified**; it needs a
+  machine with a wireless adapter.
+- **GPU temperature** — `D3DKMTQueryAdapterInfo` type **62** (`KMTQAITYPE_ADAPTERPERFDATA`)
+  returns `STATUS_SUCCESS`; `Temperature` is tenths of °C at offset 56. Types 61, 63, 64
+  and the plan's guessed 45 all return `0xC000000D`. Live: adapter 0 (Radeon R7) 49–64 °C;
+  adapter 1 (Microsoft Basic Render) unsupported → null → row hidden.
+  `Sample().TemperatureC` carries the value the overlay already binds.
+- **GPU counters** — one adapter sampled at `util = 5–26%`, `mem ≈ 626–693 MB`; row count
+  equals the adapter list. Multi-GPU index ordering unverified (only one real adapter).
+- **GPU reason** — text function tested named and generic. The R7 does expose GPU Engine
+  counters, so the reason row is not visible on this machine.
+- **Memory** — `Commit 7.1 GB / 12.2 GB`, `Cached 1.4–1.6 GB`, `Paged pool 319–320 MB`,
+  `Nonpaged pool 167–169 MB`. Percent 74% matched `Win32_OperatingSystem` 74% at the same
+  moment; it is now computed from raw bytes, not rounded GB.
+- **No console** — published win-x64 exe has PE subsystem 2 (GUI); launched for 6 s with
+  0 child processes.
+- **Publish** — win-x64 and linux-x64 both succeed.
+
+Not verifiable here: connected Wi-Fi, on-screen confirmation of the overlay and memory rows
+(the app opens on Home and needs clicks), and Linux output on a Linux box. The shared
+changes are Windows-only additions; `Details` defaults to empty, so the Linux view renders
+nothing new.
