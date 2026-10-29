@@ -61,11 +61,35 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         // Non-NVIDIA (or when nvidia-smi is missing): GPU Engine 3D counters,
         // summed per phys_N adapter. Values are keyed by adapter index, so an
         // adapter that already has a value cannot shift the ones after it.
-        GpuAssign.ApplyByIndex(result, SamplePerfByPhys(), SampleAdapterMemoryByPhys());
+        // Counters are matched to adapters by LUID (resolved to a name through D3DKMT)
+        // so a laptop with an iGPU + dGPU cannot swap their values; positional
+        // phys_N matching remains the fallback for adapters that cannot be resolved.
+        var perf = SamplePerf();
+        var mem = SampleAdapterMemory();
+        var luidNames = GpuLuid.ReadAdapterNames();
+        var utilByIndex = new SortedDictionary<int, float>(perf.ByPhys);
+        var memByIndex = new SortedDictionary<int, (long Dedicated, long Shared)>(mem.ByPhys);
+        var luidForGpu = GpuLuid.MatchByName(result, luidNames);
+        foreach (var (idx, luid) in luidForGpu)
+        {
+            if (perf.ByLuid.TryGetValue(luid, out float u)) utilByIndex[idx] = u;
+            else utilByIndex.Remove(idx);
+            if (mem.ByLuid.TryGetValue(luid, out var m)) memByIndex[idx] = m;
+            else memByIndex.Remove(idx);
+        }
+        GpuAssign.ApplyByIndex(result, utilByIndex, memByIndex);
 
         // Temperature straight from the WDDM driver for adapters nvidia-smi
         // did not fill; null when the driver does not answer.
         GpuAssign.ApplyTemperatures(result, GpuTemperature.ReadAll());
+
+        // Adapters the WMI counters could not read (e.g. recent AMD drivers):
+        // ask the host-supplied vendor-library reader, if any.
+        var missing = result.Where(g => g.Utilization == null).ToList();
+        if (missing.Count > 0 && ExternalGpuLoad.Fill is { } fill)
+        {
+            try { fill(missing); } catch { }
+        }
 
         // Linux shows why there is no utilization; match that instead of "-".
         foreach (var g in result)
@@ -142,9 +166,10 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
 
     // WMI formatted GPU perf classes keep English names on non-English Windows
     // (the "GPU Engine" / "GPU Adapter Memory" PerformanceCounter categories do not).
-    private SortedDictionary<int, float> SamplePerfByPhys()
+    private (SortedDictionary<int, float> ByPhys, Dictionary<string, float> ByLuid) SamplePerf()
     {
         var byPhys = new SortedDictionary<int, float>();
+        var byLuid = new Dictionary<string, float>();
         try
         {
             var instances = new List<(string Name, float Usage)>();
@@ -160,29 +185,67 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
                 System.Diagnostics.Debug.WriteLine($"[GPU WMI] Name='{name}', UtilizationPercentage={rawUsage}");
             }
 
-            bool has3D = instances.Any(i => i.Name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase));
-            bool useCompute = !has3D && instances.Any(i => i.Name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase));
-
+            // Same semantics as Task Manager: add up every process on one engine
+            // (eng_N), then report the busiest engine of the preferred type. Summing
+            // across engines would overcount on drivers that expose several 3D engines.
+            var perEngine = new Dictionary<(string Luid, int Phys, int Eng, string Type), float>();
+            var seen = new SortedSet<(string Luid, int Phys)>();
             foreach (var instance in instances)
             {
-                bool is3D = instance.Name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase);
-                bool isCompute = instance.Name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase);
-
-                if (has3D ? !is3D : (!useCompute || !isCompute)) continue;
-
                 int? phys = PhysIndex(instance.Name);
                 if (phys == null) continue;
+                string luid = GpuLuid.FromInstance(instance.Name) ?? "";
+                seen.Add((luid, phys.Value));
 
-                byPhys[phys.Value] = byPhys.TryGetValue(phys.Value, out float sum)
-                    ? sum + instance.Usage
-                    : instance.Usage;
+                string? type = EngineType(instance.Name);
+                if (type == null) continue;
+
+                var key = (luid, phys.Value, EngineIndex(instance.Name), type);
+                perEngine[key] = perEngine.TryGetValue(key, out float sum) ? sum + instance.Usage : instance.Usage;
+            }
+
+            foreach (var (luid, phys) in seen)
+            {
+                // 3D first, Compute when the driver has no 3D engine. An adapter that
+                // is listed but idle has no instances of either type: that is 0 %, not
+                // "utilization not exposed".
+                float? best = null;
+                foreach (string type in new[] { "3D", "Compute" })
+                {
+                    var values = perEngine.Where(kv => kv.Key.Luid == luid && kv.Key.Phys == phys
+                        && string.Equals(kv.Key.Type, type, StringComparison.OrdinalIgnoreCase))
+                        .Select(kv => kv.Value).ToList();
+                    if (values.Count == 0) continue;
+                    best = values.Max();
+                    break;
+                }
+                float v = (float)Math.Min(Math.Round(best ?? 0f, 1), 100);
+                byPhys[phys] = byPhys.TryGetValue(phys, out float prev) ? Math.Max(prev, v) : v;
+                if (luid.Length > 0)
+                    byLuid[luid] = byLuid.TryGetValue(luid, out float p2) ? Math.Max(p2, v) : v;
             }
         }
         catch { }
 
-        foreach (int key in byPhys.Keys.ToList())
-            byPhys[key] = (float)Math.Min(Math.Round(byPhys[key], 1), 100);
-        return byPhys;
+        return (byPhys, byLuid);
+    }
+
+    private static string? EngineType(string instance)
+    {
+        int idx = instance.IndexOf("engtype_", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+        string rest = instance[(idx + 8)..];
+        int end = rest.IndexOfAny(new[] { '_', ' ' });
+        return end < 0 ? rest : rest[..end];
+    }
+
+    private static int EngineIndex(string instance)
+    {
+        int idx = instance.IndexOf("_eng_", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return 0;
+        int start = idx + 5, end = start;
+        while (end < instance.Length && char.IsDigit(instance[end])) end++;
+        return end > start && int.TryParse(instance.AsSpan(start, end - start), out int v) ? v : 0;
     }
 
     private static int? PhysIndex(string instance)
@@ -196,9 +259,11 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         return int.TryParse(instance.AsSpan(start, end - start), out int v) ? v : null;
     }
 
-    private SortedDictionary<int, (long Dedicated, long Shared)> SampleAdapterMemoryByPhys()
+    private (SortedDictionary<int, (long Dedicated, long Shared)> ByPhys,
+             Dictionary<string, (long Dedicated, long Shared)> ByLuid) SampleAdapterMemory()
     {
         var byPhys = new SortedDictionary<int, (long, long)>();
+        var byLuid = new Dictionary<string, (long, long)>();
         try
         {
             using var searcher = new System.Management.ManagementObjectSearcher(
@@ -214,10 +279,16 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
                 byPhys[phys.Value] = byPhys.TryGetValue(phys.Value, out var sum)
                     ? (sum.Item1 + dedicated, sum.Item2 + shared)
                     : (dedicated, shared);
+
+                string? luid = GpuLuid.FromInstance(name);
+                if (luid != null)
+                    byLuid[luid] = byLuid.TryGetValue(luid, out var l)
+                        ? (l.Item1 + dedicated, l.Item2 + shared)
+                        : (dedicated, shared);
             }
         }
         catch { }
-        return byPhys;
+        return (byPhys, byLuid);
     }
 
     // Display-adapter total VRAM from the registry. Win32_VideoController.AdapterRAM

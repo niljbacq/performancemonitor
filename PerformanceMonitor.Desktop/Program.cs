@@ -23,6 +23,7 @@ internal class Program
         if (OperatingSystem.IsWindows())
         {
             ShortcutHelper.TryCreateStartMenuShortcut();
+            LibreHardwareGpuLoad.Register();
         }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
