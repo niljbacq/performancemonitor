@@ -147,19 +147,35 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         var byPhys = new SortedDictionary<int, float>();
         try
         {
+            var instances = new List<(string Name, float Usage)>();
             using var searcher = new System.Management.ManagementObjectSearcher(
                 "SELECT Name, UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine");
             foreach (System.Management.ManagementObject obj in searcher.Get())
             {
                 string name = obj["Name"]?.ToString() ?? "";
-                if (!name.EndsWith("engtype_3D", StringComparison.OrdinalIgnoreCase)) continue;
-                int? phys = PhysIndex(name);
+                var rawUsage = obj["UtilizationPercentage"];
+                var usage = (rawUsage == null || rawUsage == DBNull.Value) ? 0f : (float)Convert.ToDouble(rawUsage);
+                instances.Add((name, usage));
+
+                System.Diagnostics.Debug.WriteLine($"[GPU WMI] Name='{name}', UtilizationPercentage={rawUsage}");
+            }
+
+            bool has3D = instances.Any(i => i.Name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase));
+            bool useCompute = !has3D && instances.Any(i => i.Name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase));
+
+            foreach (var instance in instances)
+            {
+                bool is3D = instance.Name.Contains("engtype_3D", StringComparison.OrdinalIgnoreCase);
+                bool isCompute = instance.Name.Contains("engtype_Compute", StringComparison.OrdinalIgnoreCase);
+
+                if (has3D ? !is3D : (!useCompute || !isCompute)) continue;
+
+                int? phys = PhysIndex(instance.Name);
                 if (phys == null) continue;
 
-                float value = (float)Convert.ToDouble(obj["UtilizationPercentage"]);
                 byPhys[phys.Value] = byPhys.TryGetValue(phys.Value, out float sum)
-                    ? sum + value
-                    : value;
+                    ? sum + instance.Usage
+                    : instance.Usage;
             }
         }
         catch { }
