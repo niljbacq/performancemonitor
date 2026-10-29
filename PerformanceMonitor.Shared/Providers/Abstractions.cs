@@ -85,7 +85,13 @@ public sealed record MemoryUsage(double TotalGB, double UsedGB, double Percent)
     public string? InactiveText { get; init; }
     public string? SlabText { get; init; }
     public string? PressureText { get; init; }
+
+    // Windows-only rows (Commit/Cached/pools). Linux leaves this empty so its
+    // view renders exactly what it rendered before.
+    public IReadOnlyList<MemoryDetail> Details { get; init; } = Array.Empty<MemoryDetail>();
 }
+
+public sealed record MemoryDetail(string Label, string Value);
 
 // ---- Interfaces ----
 
@@ -100,6 +106,7 @@ public interface ICpuProvider
     string? ProcessStatsUnavailableMessage => null;
 
     string? PerCoreFrequencyText => null;
+    string? CurrentSpeedText => null;
     string? FrequencyResidencyText => null;
     string? AppUsageText => null;
 }
@@ -138,6 +145,7 @@ public sealed class GpuInfo
     public string? Kind { get; set; }
     public string? DriverVersion { get; set; }
     public string? DriverDate { get; set; }
+    public string? DriverName { get; set; }
     public string? GraphicsApi { get; set; }
     public string? PhysicalLocation { get; set; }
     public string? Vendor { get; set; }

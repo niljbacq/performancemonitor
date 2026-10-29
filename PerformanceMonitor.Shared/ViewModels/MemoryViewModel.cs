@@ -1,6 +1,7 @@
 ﻿using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using TaskManager.Providers;
@@ -29,6 +30,7 @@ public partial class MemoryViewModel : ViewModelBase
     [ObservableProperty] private string? _inactiveText;
     [ObservableProperty] private string? _slabText;
     [ObservableProperty] private string? _pressureText;
+    [ObservableProperty] private IReadOnlyList<MemoryDetail> _details = Array.Empty<MemoryDetail>();
 
     public MemoryViewModel() : this(ProviderFactory.CreateMemory()) { }
 
@@ -76,6 +78,7 @@ public partial class MemoryViewModel : ViewModelBase
                         InactiveText = m.InactiveText;
                         SlabText = m.SlabText;
                         PressureText = m.PressureText;
+                        Details = m.Details;
                     });
                 }
                 catch { }

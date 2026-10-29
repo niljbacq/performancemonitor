@@ -5,52 +5,200 @@ using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 
 namespace TaskManager.Providers;
 
+[SupportedOSPlatform("windows")]
 public sealed class WindowsWifiProvider : IWifiProvider
 {
+    private DateTime _netshAt;
+    private string? _netshAdapter;
+    private (string? Ssid, string? Bssid, string? SignalPercent, string? Radio, string? Band) _netsh;
+
     public WifiDetails GetDetails(string interfaceName)
     {
-        string output = CommandRunner.Run("netsh", "wlan show interfaces", 2000);
+        // Windows uses GetSnapshot; projecting keeps one parsing path.
+        var snap = GetSnapshot();
+        return snap == null
+            ? new WifiDetails("Disconnected", "Not connected", "-", "-")
+            : new WifiDetails(snap.Status, snap.Ssid, snap.ConnectionType, snap.SignalStrength);
+    }
 
-        // netsh labels are localised, but the values are not. Pair every
-        // "label: value" line and identify fields by their value shape.
-        var pairs = new List<(string Label, string Value)>();
+    // netsh spawn costs ~80-120 ms here; the view model samples every 2 s,
+    // so cache the parsed fields for 5 s.
+    private (string? Ssid, string? Bssid, string? SignalPercent, string? Radio, string? Band)
+        ReadNetsh(string adapterName, string ownMac)
+    {
+        if (_netshAdapter == adapterName && DateTime.UtcNow - _netshAt < TimeSpan.FromSeconds(5))
+            return _netsh;
+
+        string output = CommandRunner.Run("netsh", "wlan show interfaces", 2000);
+        _netsh = ParseInterface(output, adapterName, ownMac);
+        _netshAdapter = adapterName;
+        _netshAt = DateTime.UtcNow;
+        return _netsh;
+    }
+
+    // Labels are localized, but the values are not, so every field is found
+    // by the shape of its value.
+    private static (string? Ssid, string? Bssid, string? SignalPercent, string? Radio, string? Band)
+        ParseInterface(string output, string adapterName, string ownMac)
+    {
+        // netsh prints one block per adapter, blank-line separated. Pick the
+        // block for this NIC by its Name value; fall back to the first block.
+        var blocks = new List<List<(string Label, string Value)>>();
+        var current = new List<(string Label, string Value)>();
         foreach (string line in output.Split('\n'))
         {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                if (current.Count > 0) blocks.Add(current);
+                current = new List<(string Label, string Value)>();
+                continue;
+            }
             int colon = line.IndexOf(':');
             if (colon <= 0) continue;
-            pairs.Add((line[..colon].Trim(), line[(colon + 1)..].Trim()));
+            current.Add((line[..colon].Trim(), line[(colon + 1)..].Trim()));
         }
+        if (current.Count > 0) blocks.Add(current);
 
-        int bssidIndex = pairs.FindIndex(p =>
-            Regex.IsMatch(p.Value, @"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"));
+        var pairs = blocks.FirstOrDefault(b =>
+                        b.Any(p => string.Equals(p.Value, adapterName, StringComparison.OrdinalIgnoreCase)))
+                    ?? blocks.FirstOrDefault()
+                    ?? new List<(string Label, string Value)>();
 
-        string? ssid = null;
-        if (bssidIndex > 0)
-        {
-            string candidate = pairs[bssidIndex - 1].Value;
-            if (candidate.Length > 0) ssid = candidate;
-        }
-
+        // The adapter's own MAC is also MAC-shaped and comes first; skip it so
+        // the next one is the AP's BSSID and the line above it is the SSID.
+        string own = NormalizeMac(ownMac);
+        int bssidIndex = pairs.FindIndex(p => IsMac(p.Value) && NormalizeMac(p.Value) != own);
+        string? bssid = bssidIndex >= 0 ? pairs[bssidIndex].Value : null;
+        string? ssid = bssidIndex > 0 ? pairs[bssidIndex - 1].Value : null;
         string? signal = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^\d{1,3}\s*%$")).Value;
         string? radio = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^802\.11")).Value;
+        string? band = pairs.FirstOrDefault(p => Regex.IsMatch(p.Value, @"^(2\.4|5|6)\s*GHz$")).Value;
 
-        NetworkInterface? nic = NetworkInterface.GetAllNetworkInterfaces()
-            .FirstOrDefault(n => n.Name == interfaceName);
-        bool connected = bssidIndex >= 0
-                         || (nic?.OperationalStatus == OperationalStatus.Up && ssid != null);
+        return (ssid, bssid, signal, radio, band);
+    }
 
-        if (!connected)
-            return new WifiDetails("Disconnected", "Not connected", radio ?? "-", "-");
+    private static bool IsMac(string value) =>
+        Regex.IsMatch(value, @"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$");
 
-        return new WifiDetails(
-            "Connected",
-            ssid ?? "Connected",
-            radio ?? "-",
-            signal != null ? $"📶 {signal}" : "-");
+    private static string NormalizeMac(string value) =>
+        value.Replace(":", "").Replace("-", "").ToUpperInvariant();
+
+    public WifiSnapshot? GetSnapshot()
+    {
+        var nic = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
+            .OrderByDescending(n => n.OperationalStatus == OperationalStatus.Up)
+            .FirstOrDefault();
+
+        string adapter = string.IsNullOrWhiteSpace(nic?.Description) ? "Wi-Fi" : nic!.Description;
+        if (nic == null)
+            return new WifiSnapshot(adapter, "Disconnected", "No wireless adapter", "-", "-", "-", "-", null, null);
+
+        // WlanAPI first; netsh stays as the fallback only when the API itself
+        // cannot answer (stopped WLAN service, no handle), never as a second
+        // opinion on a connection state it already reported.
+        var wlan = WlanApi.Query();
+        if (wlan is { Connected: true } w)
+            return BuildFromWlan(nic, adapter, w);
+        if (wlan is not null)
+            return new WifiSnapshot(adapter, "Disconnected", "Not connected", "-", "-", "-", "-", null, null);
+
+        var parsed = ReadNetsh(nic.Name, nic.GetPhysicalAddress().ToString());
+
+        string? bssid = parsed.Bssid;
+        string? ssid = parsed.Ssid;
+        string? signalText = parsed.SignalPercent;
+        string? radio = parsed.Radio;
+        string? band = parsed.Band;
+
+        if (nic.OperationalStatus != OperationalStatus.Up || bssid == null)
+            return new WifiSnapshot(adapter, "Disconnected", "Not connected", "-", "-", "-", "-", null, null);
+
+        string standard = WifiText.StandardFromPhy(radio);
+        int? percent = int.TryParse(signalText?.TrimEnd('%', ' '), out int p) ? Math.Clamp(p, 0, 100) : null;
+
+        var net = ReadNetwork(nic);
+        return new WifiSnapshot(adapter, "Connected", ssid ?? "Connected",
+            string.Join(" ", new[] { "802.11", standard, band }.Where(s => !string.IsNullOrEmpty(s))),
+            percent is int sp ? $"📶 {sp}%" : "-", net.Ipv4, net.Ipv6, net.Sent, net.Received)
+        {
+            WifiStandard = standard,
+            SignalPercentText = percent is int q ? $"{q}%" : null,
+            Bssid = bssid,
+            Gateway = net.Gateway,
+            Dns1 = net.Dns.ElementAtOrDefault(0),
+            Dns2 = net.Dns.ElementAtOrDefault(1),
+            Netmask = net.Mask,
+            DhcpServer = net.Dhcp,
+            DownloadText = net.Received is long rx ? $"{rx / 1048576.0:F1} MB since boot" : null,
+            UploadText = net.Sent is long tx ? $"{tx / 1048576.0:F1} MB since boot" : null
+        };
+    }
+
+    private static WifiSnapshot BuildFromWlan(NetworkInterface nic, string adapter, WlanState wlan)
+    {
+        string standard = WifiText.StandardFromPhy(wlan.Phy);
+        string? signal = wlan.RssiDbm is int dbm ? $"📶 {dbm} dBm" : null;
+        int? percent = wlan.RssiDbm is int r ? WifiText.PercentFromRssi(r) : null;
+
+        var net = ReadNetwork(nic);
+        return new WifiSnapshot(adapter, "Connected", wlan.Ssid ?? "Connected",
+            string.Join(" ", new[] { "802.11", standard, wlan.Band }.Where(s => !string.IsNullOrEmpty(s))),
+            signal ?? "-", net.Ipv4, net.Ipv6, net.Sent, net.Received)
+        {
+            WifiStandard = standard,
+            SignalPercentText = percent is int q ? $"{q}%" : null,
+            Bssid = wlan.Bssid,
+            Gateway = net.Gateway,
+            Dns1 = net.Dns.ElementAtOrDefault(0),
+            Dns2 = net.Dns.ElementAtOrDefault(1),
+            Netmask = net.Mask,
+            DhcpServer = net.Dhcp,
+            DownloadText = net.Received is long rx ? $"{rx / 1048576.0:F1} MB since boot" : null,
+            UploadText = net.Sent is long tx ? $"{tx / 1048576.0:F1} MB since boot" : null
+        };
+    }
+
+    private static (string Ipv4, string Ipv6, long? Sent, long? Received,
+        string? Gateway, string? Dhcp, List<string> Dns, string Mask) ReadNetwork(NetworkInterface nic)
+    {
+        string ipv4 = "-", ipv6 = "-", mask = "-";
+        string? gateway = null, dhcp = null;
+        var dns = new List<string>();
+        long? sent = null, received = null;
+        try
+        {
+            var ip = nic.GetIPProperties();
+            foreach (var ua in ip.UnicastAddresses)
+            {
+                if (ua.Address.AddressFamily == AddressFamily.InterNetwork && ipv4 == "-")
+                {
+                    ipv4 = ua.Address.ToString();
+                    mask = ua.IPv4Mask?.ToString() ?? "-";
+                }
+                else if (ua.Address.AddressFamily == AddressFamily.InterNetworkV6 && ipv6 == "-"
+                         && !ua.Address.IsIPv6LinkLocal)
+                {
+                    ipv6 = ua.Address.ToString();
+                }
+            }
+            gateway = ip.GatewayAddresses.FirstOrDefault(g => g.Address.ToString() != "0.0.0.0")?.Address.ToString();
+            dhcp = ip.DhcpServerAddresses.FirstOrDefault()?.ToString();
+            dns = ip.DnsAddresses.Select(a => a.ToString()).Take(2).ToList();
+
+            // GetIPStatistics counts IPv4 and IPv6 together (GetIfEntry2).
+            var stats = nic.GetIPStatistics();
+            sent = stats.BytesSent;
+            received = stats.BytesReceived;
+        }
+        catch { }
+
+        return (ipv4, ipv6, sent, received, gateway, dhcp, dns, mask);
     }
 }
 

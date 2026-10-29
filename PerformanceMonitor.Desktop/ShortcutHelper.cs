@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Diagnostics;
 
@@ -8,6 +9,12 @@ namespace TaskManager;
 internal static class ShortcutHelper
 {
     public const string ShortcutFileName = "Performance Monitor.lnk";
+
+    [DllImport("shell32.dll")]
+    private static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
+
+    private const int SHCNE_ASSOCCHANGED = 0x08000000;
+    private const uint SHCNF_IDLIST = 0x0000;
 
     [SupportedOSPlatform("windows")]
     public static void TryCreateStartMenuShortcut()
@@ -26,22 +33,29 @@ internal static class ShortcutHelper
             if (string.IsNullOrEmpty(startMenu)) return;
 
             string lnkPath = Path.Combine(startMenu, ShortcutFileName);
-            if (File.Exists(lnkPath)) return; // Idempotent: skip if user already has it
 
             var shellType = Type.GetTypeFromProgID("WScript.Shell");
             if (shellType is null) return;
 
             dynamic shell = Activator.CreateInstance(shellType)!;
             dynamic shortcut = shell.CreateShortcut(lnkPath);
-            shortcut.TargetPath = exe;
-            shortcut.WorkingDirectory = Path.GetDirectoryName(exe);
-            shortcut.Description = "Performance Monitor";
-            
-            // Set the duck icon! Assumes app.ico is next to the exe (copy it in csproj)
-            string iconPath = Path.Combine(Path.GetDirectoryName(exe)!, "Assets", "app.ico");
-            shortcut.IconLocation = File.Exists(iconPath) ? iconPath : $"{exe},0";
-            
-            shortcut.Save();
+
+            bool targetMatches = File.Exists(lnkPath) &&
+                string.Equals((string?)shortcut.TargetPath, exe, StringComparison.OrdinalIgnoreCase);
+
+            if (!targetMatches)
+            {
+                shortcut.TargetPath = exe;
+                shortcut.WorkingDirectory = Path.GetDirectoryName(exe);
+                shortcut.Description = "Performance Monitor";
+
+                string iconPath = Path.Combine(Path.GetDirectoryName(exe)!, "Assets", "app.ico");
+                shortcut.IconLocation = File.Exists(iconPath) ? iconPath : $"{exe},0";
+                shortcut.Save();
+            }
+
+            // Windows caches Start menu apps; ask it to re-read them on every run.
+            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
         }
         catch
         {

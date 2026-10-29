@@ -338,8 +338,10 @@ internal static class SeekPenaltyClassifier
 
                 if (DeviceIoControl(handle, IOCTL_STORAGE_QUERY_PROPERTY, inBuffer, (uint)inBufferSize, outBuffer, (uint)outBufferSize, out _, IntPtr.Zero))
                 {
-                    // DEVICE_SEEK_PENALTY_DESCRIPTOR has Version (4 bytes) and IncursSeekPenalty (1 byte)
-                    bool incursSeekPenalty = System.Runtime.InteropServices.Marshal.ReadByte(outBuffer, 4) != 0;
+                    // DEVICE_SEEK_PENALTY_DESCRIPTOR: Version (4), Size (4), IncursSeekPenalty (1) at offset 8.
+                    int descriptorSize = System.Runtime.InteropServices.Marshal.ReadInt32(outBuffer, 4);
+                    if (descriptorSize < 9) return null;
+                    bool incursSeekPenalty = System.Runtime.InteropServices.Marshal.ReadByte(outBuffer, 8) != 0;
                     return !incursSeekPenalty; // False penalty = SSD, True penalty = HDD
                 }
             }

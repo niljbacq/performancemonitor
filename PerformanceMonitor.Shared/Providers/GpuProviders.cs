@@ -59,44 +59,23 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         NvidiaSmi.Apply(result, rows, includeLive: true);
 
         // Non-NVIDIA (or when nvidia-smi is missing): GPU Engine 3D counters,
-        // summed per phys_N adapter and assigned in phys order (best effort;
-        // Windows does not expose a reliable WMI-to-phys mapping).
-        var byPhys = SamplePerfByPhys();
-        int physIdx = 0;
-        foreach (var g in result)
-        {
-            if (g.Utilization != null) continue;
-            if (physIdx >= byPhys.Count) break;
-            g.Utilization = byPhys[physIdx];
-            physIdx++;
-        }
+        // summed per phys_N adapter. Values are keyed by adapter index, so an
+        // adapter that already has a value cannot shift the ones after it.
+        GpuAssign.ApplyByIndex(result, SamplePerfByPhys(), SampleAdapterMemoryByPhys());
 
-        // GPU memory for any vendor, without DXGI: the "GPU Adapter Memory"
-        // counters give Dedicated/Shared Usage in bytes per adapter. Total VRAM
-        // comes from the registry (qwMemorySize), which is not capped at 4 GB.
-        var memByPhys = SampleAdapterMemoryByPhys();
-        int memIdx = 0;
+        // Temperature straight from the WDDM driver for adapters nvidia-smi
+        // did not fill; null when the driver does not answer.
+        GpuAssign.ApplyTemperatures(result, GpuTemperature.ReadAll());
+
+        // Linux shows why there is no utilization; match that instead of "-".
         foreach (var g in result)
         {
-            if (g.MemoryUsage != null) continue;
-            if (memIdx >= memByPhys.Count) break;
-            var (dedicated, shared) = memByPhys.ElementAt(memIdx).Value;
-            if (dedicated > 0 || shared > 0 || g.TotalMemoryBytes != null)
-            {
-                string used = Bytes(dedicated);
-                g.MemoryUsage = g.TotalMemoryBytes is long total ? $"{used} / {Bytes(total)}" : used;
-                if (shared > 0) g.SharedMemoryUsage = Bytes(shared);
-            }
-            memIdx++;
+            if (g.Utilization == null && g.UtilizationText == null)
+                g.UtilizationText = GpuReason.ForUtilization(g.DriverName);
         }
 
         return result;
     }
-
-    private static string Bytes(long b) =>
-        b >= 1024L * 1024 * 1024 ? $"{b / (1024.0 * 1024 * 1024):F2} GB"
-        : b >= 1024L * 1024 ? $"{b / (1024.0 * 1024):F0} MB"
-        : $"{b / 1024.0:F0} KB";
 
     private List<GpuInfo> BuildList()
     {
@@ -122,6 +101,7 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
                 };
                 if (DateTime.TryParse(obj["DriverDate"]?.ToString(), out var date))
                     info.DriverDate = date.ToShortDateString();
+                info.DriverName = ReadDriverService(pnp);
                 list.Add(info);
             }
         }
@@ -144,9 +124,25 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         return list;
     }
 
+    // Kernel miniport service name ("amdkmdag", "igdkmd64", "nvlddmkm") from the
+    // device's enum key; the WMI InstalledDisplayDrivers value holds DLL paths.
+    private static string? ReadDriverService(string? pnpDeviceId)
+    {
+        if (string.IsNullOrEmpty(pnpDeviceId)) return null;
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\" + pnpDeviceId);
+            return key?.GetValue("Service") as string;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // WMI formatted GPU perf classes keep English names on non-English Windows
     // (the "GPU Engine" / "GPU Adapter Memory" PerformanceCounter categories do not).
-    private IReadOnlyList<float> SamplePerfByPhys()
+    private SortedDictionary<int, float> SamplePerfByPhys()
     {
         var byPhys = new SortedDictionary<int, float>();
         try
@@ -170,7 +166,7 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
 
         foreach (int key in byPhys.Keys.ToList())
             byPhys[key] = (float)Math.Min(Math.Round(byPhys[key], 1), 100);
-        return byPhys.Values.ToList();
+        return byPhys;
     }
 
     private static int? PhysIndex(string instance)
@@ -246,9 +242,11 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
         return 0;
     }
 
-    // Match a WMI PNPDeviceID against a display-class MatchingDeviceId prefix
-    // (e.g. "PCI\VEN_1002&DEV_130F&SUBSYS_..." matches the longer PNPDeviceID).
-    private static long? MatchTotalBytes(Dictionary<string, long> totals, string? pnp)
+    // Match a WMI PNPDeviceID against a display-class MatchingDeviceId. The class
+    // key stores "PCI\VEN_1002&DEV_130F&REV_D4" while WMI reports
+    // "PCI\VEN_1002&DEV_130F&SUBSYS_..&REV_D4\..", which diverges at SUBSYS, so
+    // after the exact-prefix check fall back to the vendor+device prefix.
+    public static long? MatchTotalBytes(Dictionary<string, long> totals, string? pnp)
     {
         if (string.IsNullOrEmpty(pnp) || totals.Count == 0) return null;
         string norm = pnp.ToUpperInvariant();
@@ -258,7 +256,20 @@ public sealed class WindowsGpuProvider : IGpuProvider, IGpuListProvider
             if (norm.StartsWith(m, StringComparison.Ordinal) || m.StartsWith(norm, StringComparison.Ordinal))
                 return kv.Value;
         }
+
+        string key = VendorDeviceKey(norm);
+        if (key.Length == 0) return null;
+        foreach (var kv in totals)
+        {
+            if (VendorDeviceKey(kv.Key.ToUpperInvariant()) == key) return kv.Value;
+        }
         return null;
+    }
+
+    private static string VendorDeviceKey(string id)
+    {
+        int dev = id.IndexOf("&DEV_", StringComparison.Ordinal);
+        return dev > 0 && dev + 9 <= id.Length ? id[..(dev + 9)] : "";
     }
 
     private static string? VendorFromName(string name)
@@ -544,6 +555,7 @@ internal static class GpuMap
         Kind = src.Kind,
         DriverVersion = src.DriverVersion,
         DriverDate = src.DriverDate,
+        DriverName = src.DriverName,
         GraphicsApi = src.GraphicsApi,
         PhysicalLocation = src.PhysicalLocation,
         Vendor = src.Vendor,
@@ -564,6 +576,49 @@ internal static class GpuMap
         }
         return list.Count > 0 ? list[0] : null;
     }
+}
+
+// Assigns per-adapter counters by adapter index. A running counter (the old
+// behaviour) shifted every later adapter whenever an earlier one was skipped.
+public static class GpuAssign
+{
+    public static void ApplyByIndex(IReadOnlyList<GpuInfo> gpus,
+        SortedDictionary<int, float> utilization,
+        SortedDictionary<int, (long Dedicated, long Shared)> memory)
+    {
+        for (int i = 0; i < gpus.Count; i++)
+        {
+            var g = gpus[i];
+            if (g.Utilization == null && utilization.TryGetValue(i, out float u))
+                g.Utilization = u;
+
+            if (g.MemoryUsage != null || !memory.TryGetValue(i, out var m)) continue;
+            if (m.Dedicated <= 0 && m.Shared <= 0 && g.TotalMemoryBytes == null) continue;
+
+            string used = Bytes(m.Dedicated);
+            g.MemoryUsage = g.TotalMemoryBytes is long total ? $"{used} / {Bytes(total)}" : used;
+            if (m.Shared > 0) g.SharedMemoryUsage = Bytes(m.Shared);
+        }
+    }
+
+    public static void ApplyTemperatures(IReadOnlyList<GpuInfo> gpus, IReadOnlyList<double?> temps)
+    {
+        // A shifted list would show one card's temperature on another, so a
+        // length mismatch applies nothing and the rows stay hidden.
+        if (temps.Count != gpus.Count) return;
+
+        for (int i = 0; i < gpus.Count; i++)
+        {
+            if (gpus[i].TemperatureC == null && gpus[i].TemperatureText == null
+                && temps[i] is double t)
+                gpus[i].TemperatureC = t;
+        }
+    }
+
+    public static string Bytes(long b) =>
+        b >= 1024L * 1024 * 1024 ? $"{b / (1024.0 * 1024 * 1024):F2} GB"
+        : b >= 1024L * 1024 ? $"{b / (1024.0 * 1024):F0} MB"
+        : $"{b / 1024.0:F0} KB";
 }
 
 public sealed class LinuxGpuProvider : IGpuProvider, IGpuListProvider

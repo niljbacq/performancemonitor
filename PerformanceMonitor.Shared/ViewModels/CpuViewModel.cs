@@ -180,6 +180,7 @@ public partial class CpuViewModel : ViewModelBase
                     string? perCoreText = _provider.PerCoreFrequencyText;
                     string? residencyText = _provider.FrequencyResidencyText;
                     string? appUsageText = _provider.AppUsageText;
+                    string? speedText = _provider.CurrentSpeedText;
 
                     Dispatcher.UIThread.Post(() =>
                     {
@@ -192,6 +193,7 @@ public partial class CpuViewModel : ViewModelBase
                         if (perCoreText != null) PerCoreFrequencyText = perCoreText;
                         if (residencyText != null) FrequencyResidencyText = residencyText;
                         if (appUsageText != null) AppUsageText = appUsageText;
+                        if (speedText != null) Speed = speedText;
 
                         if (stats != null)
                         {
